@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>幣圈擲筊機｜Long or Short?</title>
+  <style>
+    :root{
+      --bg: #0b0f1a;
+      --panel: #111831;
+      --accent: #5ee1ff;
+      --accent-2: #7cffb7;
+      --text: #e7ecf3;
+      --muted: #9aa8c7;
+      --danger: #ff6b6b;
+      --shadow: rgba(0,0,0,.35);
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      color:var(--text);
+      background:
+        radial-gradient(1200px 600px at 80% -10%, rgba(94,225,255,.15), transparent 60%),
+        radial-gradient(900px 600px at -20% 110%, rgba(124,255,183,.12), transparent 60%),
+        var(--bg);
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans TC", "Helvetica Neue", Arial, "Apple Color Emoji","Segoe UI Emoji";
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:24px;
+    }
+    .app{
+      width:100%;
+      max-width:760px;
+      background:linear-gradient(180deg, rgba(255,255,255,.02), rgba(255,255,255,.00));
+      border:1px solid rgba(255,255,255,.08);
+      border-radius:16px;
+      box-shadow:0 12px 40px var(--shadow);
+      padding:24px;
+      backdrop-filter: blur(6px);
+    }
+    h1{
+      margin:0 0 4px;
+      font-size:28px;
+      letter-spacing:.3px;
+    }
+    .sub{
+      margin:0 0 20px;
+      color: var(--muted);
+      font-size:14px;
+    }
+    form{
+      display:flex;
+      gap:12px;
+      flex-wrap:wrap;
+      margin-bottom:16px;
+    }
+    input[type="text"]{
+      flex:1 1 260px;
+      padding:12px 14px;
+      border-radius:12px;
+      border:1px solid rgba(255,255,255,.08);
+      background:#0f1530;
+      color:var(--text);
+      outline:none;
+      font-size:16px;
+    }
+    input::placeholder{color:#7e8bb0}
+    button{
+      appearance:none;
+      border:none;
+      padding:12px 16px;
+      border-radius:12px;
+      background:linear-gradient(90deg, var(--accent), var(--accent-2));
+      color:#06121a;
+      font-weight:700;
+      cursor:pointer;
+      transition:transform .08s ease, filter .2s ease;
+    }
+    button:hover{filter:brightness(1.05)}
+    button:active{transform:translateY(1px)}
+    .row{
+      display:flex; gap:10px; align-items:center; flex-wrap:wrap;
+    }
+    .toggle{
+      display:flex; align-items:center; gap:8px;
+      background:#0f1530; color:var(--muted);
+      border:1px solid rgba(255,255,255,.08);
+      padding:10px 12px; border-radius:12px; font-size:14px;
+    }
+    .result{
+      margin-top:12px;
+      padding:18px;
+      border-radius:14px;
+      background: #0b122b;
+      border:1px solid rgba(255,255,255,.08);
+    }
+    .advice{
+      display:flex; align-items:center; justify-content:space-between; gap:12px;
+      padding:14px 16px; border-radius:12px; margin-top:8px;
+      background:#0e1635; border:1px solid rgba(255,255,255,.08);
+    }
+    .pill{
+      padding:6px 10px; border-radius:999px; font-weight:800; font-size:14px;
+    }
+    .pill.long{background:rgba(124,255,183,.15); color:var(--accent-2); border:1px solid rgba(124,255,183,.35)}
+    .pill.short{background:rgba(255,107,107,.12); color:#ff9d9d; border:1px solid rgba(255,107,107,.35)}
+    .meta{color:var(--muted); font-size:13px}
+    .tools{display:flex; gap:8px; flex-wrap:wrap}
+    .ghost{
+      background:transparent; color:var(--text);
+      border:1px solid rgba(255,255,255,.12);
+    }
+    .history{
+      margin-top:16px;
+      border-top:1px dashed rgba(255,255,255,.15);
+      padding-top:12px;
+    }
+    table{width:100%; border-collapse:collapse; font-size:14px}
+    th,td{padding:10px 6px; border-bottom:1px solid rgba(255,255,255,.06)}
+    th{color:var(--muted); text-align:left; font-weight:600}
+    .warn{
+      color:var(--muted); font-size:12px; margin-top:8px;
+    }
+    .error{ color: var(--danger); font-size:13px; margin-top:6px;}
+    .footer{margin-top:10px; color:var(--muted); font-size:12px}
+    @media (max-width:480px){
+      h1{font-size:22px}
+      .advice{flex-direction:column; align-items:flex-start}
+      .tools{width:100%}
+    }
+  </style>
+</head>
+<body>
+  <div class="app" role="application" aria-label="幣圈擲筊機">
+    <h1>幣圈擲筊機</h1>
+    <p class="sub">輸入幣種（例：BTC、ETH、SOL），讓機率女神決定今天是 <strong>做多</strong> 還是 <strong>做空</strong>。</p>
+    <form id="form" autocomplete="off">
+      <input id="coin" type="text" inputmode="latin" placeholder="輸入幣名或代號…" aria-label="幣種名稱">
+      <div class="row">
+        <label class="toggle">
+          <input id="noRepeat" type="checkbox" style="accent-color:#5ee1ff">
+          避免連續同結果
+        </label>
+        <button type="submit" aria-label="生成建議">生成建議 🎲</button>
+      </div>
+    </form>
+    <div id="error" class="error" role="alert" aria-live="polite" style="display:none"></div>
+
+    <div class="result" id="result" style="display:none">
+      <div class="advice">
+        <div>
+          <div class="meta" id="timestamp">—</div>
+          <div id="headline" style="font-size:18px; margin-top:6px; font-weight:800">—</div>
+          <div id="reason" class="meta" style="margin-top:6px">—</div>
+        </div>
+        <div class="tools">
+          <span id="pill" class="pill">—</span>
+          <button class="ghost" id="copyBtn" title="複製結果">複製</button>
+          <button class="ghost" id="rerollBtn" title="再來一次">再擲一次</button>
+        </div>
+      </div>
+      <p class="warn">僅供娛樂用途，別把命運交給亂數。風險自負；真的想 All-in，先 All-in 睡覺。</p>
+    </div>
+
+    <div class="history" id="historyWrap" style="display:none">
+      <h3 style="margin:0 0 8px">歷史記錄</h3>
+      <table aria-label="歷史記錄表">
+        <thead>
+          <tr><th>時間</th><th>幣種</th><th>建議</th><th>理由</th></tr>
+        </thead>
+        <tbody id="histBody"></tbody>
+      </table>
+      <div class="row" style="margin-top:8px">
+        <button class="ghost" id="clearHistory">清除記錄</button>
+      </div>
+    </div>
+
+    <div class="footer">© 2025 幣圈擲筊機 · Made with ❤️ & randomness</div>
+  </div>
+
+<script>
+(function(){
+  const $ = (sel) => document.querySelector(sel);
+  const coinInput = $("#coin");
+  const form = $("#form");
+  const errorBox = $("#error");
+  const resultBox = $("#result");
+  const historyWrap = $("#historyWrap");
+  const pill = $("#pill");
+  const headline = $("#headline");
+  const timestamp = $("#timestamp");
+  const reason = $("#reason");
+  const copyBtn = $("#copyBtn");
+  const rerollBtn = $("#rerollBtn");
+  const histBody = $("#histBody");
+  const clearHistoryBtn = $("#clearHistory");
+  const noRepeat = $("#noRepeat");
+
+  const reasonsLong = [
+    "動能上膛，FOMO 正在暖身。",
+    "技術面說可以，心臟說衝吧。",
+    "多軍咖啡濃度提升 200%。",
+    "市場怕你不上車。",
+    "空軍在排隊買回補票。"
+  ];
+
+  const reasonsShort = [
+    "反彈只是禮貌，趨勢是誠實。",
+    "主力想測試你的止損。",
+    "多頭太吵，需要安靜一下。",
+    "資金費率在眨眼睛。",
+    "別人貪婪時，我們先縮手。"
+  ];
+
+  let lastPick = null;
+
+  function nowString(){
+    const d = new Date();
+    const pad = (n)=> String(n).padStart(2,'0');
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  }
+
+  function sanitizeCoin(v){
+    return v.replace(/[^a-zA-Z0-9\-\_\.]/g,'').toUpperCase().slice(0,16);
+  }
+
+  function pickSide(){
+    // Avoid repeat if toggle is on
+    let pick;
+    if(noRepeat.checked && lastPick){
+      pick = (lastPick === 'LONG') ? 'SHORT' : 'LONG';
+      // 70% chance to flip, 30% to allow repeat to keep some randomness
+      if(Math.random() < 0.3) pick = Math.random() < 0.5 ? 'LONG' : 'SHORT';
+    }else{
+      pick = Math.random() < 0.5 ? 'LONG' : 'SHORT';
+    }
+    lastPick = pick;
+    return pick;
+  }
+
+  function randomReason(side){
+    const arr = side === 'LONG' ? reasonsLong : reasonsShort;
+    return arr[Math.floor(Math.random()*arr.length)];
+  }
+
+  function render(coin, side){
+    const emoji = side === 'LONG' ? "📈" : "📉";
+    timestamp.textContent = nowString();
+    headline.textContent = `${coin} → ${side === 'LONG' ? '做多 Long' : '做空 Short'} ${emoji}`;
+    reason.textContent = randomReason(side);
+    pill.textContent = side;
+    pill.className = "pill " + (side === 'LONG' ? 'long':'short');
+    resultBox.style.display = 'block';
+
+    // Add to history
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${timestamp.textContent}</td><td>${coin}</td><td>${side}</td><td>${reason.textContent}</td>`;
+    histBody.prepend(tr);
+    historyWrap.style.display = 'block';
+
+    // Persist to localStorage
+    try{
+      const list = JSON.parse(localStorage.getItem('coinHistory') || '[]');
+      list.unshift({t: timestamp.textContent, c: coin, s: side, r: reason.textContent});
+      localStorage.setItem('coinHistory', JSON.stringify(list.slice(0,100)));
+    }catch(e){ /* ignore */ }
+  }
+
+  function restoreHistory(){
+    try{
+      const list = JSON.parse(localStorage.getItem('coinHistory') || '[]');
+      if(list.length){
+        historyWrap.style.display = 'block';
+        histBody.innerHTML = '';
+        list.forEach(item => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `<td>${item.t}</td><td>${item.c}</td><td>${item.s}</td><td>${item.r}</td>`;
+          histBody.appendChild(tr);
+        });
+      }
+    }catch(e){ /* ignore */ }
+  }
+
+  function handleSubmit(e){
+    e.preventDefault();
+    errorBox.style.display='none';
+    const raw = coinInput.value.trim();
+    const coin = sanitizeCoin(raw);
+    if(!coin){
+      errorBox.textContent = "請先輸入幣名或代號（例如：ETH）。";
+      errorBox.style.display='block';
+      coinInput.focus();
+      return;
+    }
+    const side = pickSide();
+    render(coin, side);
+  }
+
+  form.addEventListener('submit', handleSubmit);
+  rerollBtn.addEventListener('click', (e)=>{
+    e.preventDefault();
+    if(!headline.textContent || headline.textContent === '—'){
+      errorBox.textContent = "先輸入幣名再擲骰喔～";
+      errorBox.style.display='block';
+      coinInput.focus();
+      return;
+    }
+    const prev = headline.textContent.split('→')[0].trim();
+    const coin = sanitizeCoin(prev);
+    const side = pickSide();
+    render(coin, side);
+  });
+  copyBtn.addEventListener('click', async ()=>{
+    const text = `${headline.textContent} ｜ ${reason.textContent} ｜ ${timestamp.textContent}`;
+    try{
+      await navigator.clipboard.writeText(text);
+      copyBtn.textContent = "已複製";
+      setTimeout(()=> copyBtn.textContent = "複製", 1000);
+    }catch(e){
+      alert("複製失敗：可能因為瀏覽器權限限制");
+    }
+  });
+  clearHistoryBtn.addEventListener('click', ()=>{
+    histBody.innerHTML = '';
+    historyWrap.style.display = 'none';
+    try{ localStorage.removeItem('coinHistory'); }catch(e){}
+  });
+
+  // Keyboard sugar: Enter to submit; Ctrl/Cmd+Reroll shortcut = Space
+  document.addEventListener('keydown', (e)=>{
+    if(e.code === 'Space' && (document.activeElement === document.body || document.activeElement === coinInput)){
+      e.preventDefault();
+      rerollBtn.click();
+    }
+  });
+
+  // Autofocus for speed
+  coinInput.focus();
+  restoreHistory();
+})();
+</script>
+</body>
+</html>
