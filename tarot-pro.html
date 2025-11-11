@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tarot Draw — Sign in with Google</title>
+<meta name="color-scheme" content="dark light">
+<style>
+/* ==== Professional minimal brand ==== */
+:root{
+  --bg:#0b0f14;
+  --panel:#0f1524;
+  --line:#1f2a44;
+  --text:#e8eef8;
+  --muted:#93a3c3;
+  --accent:#6ad1ff;
+  --accent2:#7cffb7;
+  --danger:#ff8a8a;
+  --warn:#ffd479;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,"Noto Sans TC";background:var(--bg);color:var(--text)}
+.container{max-width:980px;margin:0 auto;padding:18px;display:flex;flex-direction:column;gap:14px}
+.header{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line);padding-bottom:12px}
+.brand{display:flex;gap:10px;align-items:center}
+.brand .logo{width:32px;height:32px;border-radius:8px;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;color:#04222a;font-weight:900}
+.brand h1{margin:0;font-size:18px;letter-spacing:.3px}
+.actions{display:flex;gap:8px;align-items:center}
+.btn{padding:10px 14px;border:none;border-radius:10px;background:linear-gradient(90deg,var(--accent),var(--accent2));color:#03202a;font-weight:700;cursor:pointer}
+.btn.ghost{background:transparent;border:1px solid var(--line);color:var(--text)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.badge{font-size:12px;color:var(--muted)}
+.panel{border:1px solid var(--line);border-radius:12px;background:var(--panel)}
+.section{padding:14px}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media (max-width:900px){ .grid{grid-template-columns:1fr} }
+.kbd{font-family:ui-monospace,Menlo,Consolas,monospace;background:#0a111e;border:1px solid var(--line);border-radius:6px;padding:2px 6px}
+.note{font-size:12px;color:var(--muted)}
+.ok{color:#95ffad}.err{color:var(--danger)}.warn{color:var(--warn)}
+.cards{display:flex;gap:12px;flex-wrap:wrap}
+.card{flex:1 1 260px;border:1px solid var(--line);background:#0e1730;border-radius:12px;padding:12px}
+.card h3{margin:0 0 6px 0;font-size:16px}
+.list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.item{border:1px solid var(--line);background:#0e1730;border-radius:10px;padding:10px}
+.item .meta{font-size:12px;color:var(--muted);margin-bottom:4px}
+footer{padding:8px;color:var(--muted);text-align:center;font-size:12px}
+.hidden{display:none}
+.divider{height:1px;background:var(--line);margin:10px 0}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="brand">
+      <div class="logo">🔮</div>
+      <h1>Tarot Draw</h1>
+    </div>
+    <div class="actions">
+      <span id="who" class="badge">未登入</span>
+      <button id="login" class="btn ghost">使用 Google 登入</button>
+      <button id="logout" class="btn ghost hidden">登出</button>
+    </div>
+  </div>
+
+  <div class="grid">
+    <!-- Draw -->
+    <section class="panel">
+      <div class="section">
+        <div class="row" style="margin-bottom:10px">
+          <button id="draw1" class="btn" disabled>抽 1 張</button>
+          <button id="draw3" class="btn" disabled>抽 3 張（過去 / 現在 / 未來）</button>
+          <button id="clear" class="btn ghost" disabled>清空畫面</button>
+          <span id="saveState" class="note"></span>
+        </div>
+        <div id="results" class="cards"></div>
+        <div class="divider"></div>
+        <div class="note">抽牌結果會自動寫入 <span class="kbd">/tarot_draws/&lt;uid&gt;/</span>，重新整理仍會保留。</div>
+      </div>
+    </section>
+
+    <!-- History -->
+    <section class="panel">
+      <div class="section">
+        <h3 style="margin:0 0 6px 0">📜 我的抽卡歷史</h3>
+        <ul id="history" class="list"></ul>
+      </div>
+    </section>
+  </div>
+
+  <footer>© 2025 Tarot Draw</footer>
+</div>
+
+<!-- Firebase v10 compat SDKs -->
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
+<script>
+// ===== Firebase config (hardcoded to your project) =====
+const firebaseConfig = {
+  apiKey: "AIzaSyC4wMh3OF2yZC74P50HVSVC6juyiK_2iHY",
+  authDomain: "coin-intel-chat.firebaseapp.com",
+  databaseURL: "https://coin-intel-chat-default-rtdb.asia-southeast1.firebasedatabase.app/",
+  projectId: "coin-intel-chat",
+  appId: "1:829267717115:web:7b0ae1ad3f6289d923b95e"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+const auth = firebase.auth();
+const GoogleProvider = new firebase.auth.GoogleAuthProvider();
+
+// ===== DOM =====
+const who = document.getElementById('who');
+const loginBtn = document.getElementById('login');
+const logoutBtn = document.getElementById('logout');
+const draw1Btn = document.getElementById('draw1');
+const draw3Btn = document.getElementById('draw3');
+const clearBtn = document.getElementById('clear');
+const results = document.getElementById('results');
+const historyList = document.getElementById('history');
+const saveState = document.getElementById('saveState');
+
+// ===== State =====
+let uid = null;
+
+// ===== Tarot data =====
+const MAJOR_ARCANA = [
+  {n:0,en:"The Fool",zh:"愚者"},{n:1,en:"The Magician",zh:"魔術師"},{n:2,en:"The High Priestess",zh:"女祭司"},
+  {n:3,en:"The Empress",zh:"皇后"},{n:4,en:"The Emperor",zh:"皇帝"},{n:5,en:"The Hierophant",zh:"教皇"},
+  {n:6,en:"The Lovers",zh:"戀人"},{n:7,en:"The Chariot",zh:"戰車"},{n:8,en:"Strength",zh:"力量"},
+  {n:9,en:"The Hermit",zh:"隱者"},{n:10,en:"Wheel of Fortune",zh:"命運之輪"},{n:11,en:"Justice",zh:"正義"},
+  {n:12,en:"The Hanged Man",zh:"吊人"},{n:13,en:"Death",zh:"死神"},{n:14,en:"Temperance",zh:"節制"},
+  {n:15,en:"The Devil",zh:"惡魔"},{n:16,en:"The Tower",zh:"高塔"},{n:17,en:"The Star",zh:"星星"},
+  {n:18,en:"The Moon",zh:"月亮"},{n:19,en:"The Sun",zh:"太陽"},{n:20,en:"Judgement",zh:"審判"},{n:21,en:"The World",zh:"世界"}
+];
+function drawOne(){ const idx = Math.floor(Math.random()*MAJOR_ARCANA.length); const upright = Math.random()<0.5; return {...MAJOR_ARCANA[idx], upright}; }
+function renderCard(c,label){
+  const div = document.createElement('div');
+  div.className='card';
+  div.innerHTML = `<h3>${label?label+'：':''}${c.zh} <span class="note">(${c.en})</span></h3>
+                   <div class="note">牌序：${c.n}　方向：<b>${c.upright ? '正位' : '逆位'}</b></div>`;
+  results.appendChild(div);
+}
+
+// ===== Auth wiring =====
+loginBtn.onclick = ()=> auth.signInWithPopup(GoogleProvider).catch(e=> alert("登入失敗："+e.code+"\\n"+e.message));
+logoutBtn.onclick = ()=> auth.signOut().catch(e=> alert("登出失敗："+e.code+"\\n"+e.message));
+
+auth.onAuthStateChanged(user=>{
+  if(user){
+    uid = user.uid;
+    who.textContent = "已登入：" + (user.displayName || user.email);
+    loginBtn.classList.add('hidden');
+    logoutBtn.classList.remove('hidden');
+    [draw1Btn, draw3Btn, clearBtn].forEach(b=> b.disabled = false);
+    attachHistoryListener();
+  }else{
+    uid = null;
+    who.textContent = "未登入";
+    loginBtn.classList.remove('hidden');
+    logoutBtn.classList.add('hidden');
+    [draw1Btn, draw3Btn, clearBtn].forEach(b=> b.disabled = true);
+    historyList.innerHTML = "";
+  }
+});
+
+// ===== Save / Load =====
+function saveDraw(cards){
+  saveState.textContent = ""; saveState.className = "note";
+  if(!uid){ saveState.textContent = "（未登入，不寫入）"; saveState.className = "note warn"; return; }
+  const payload = { cards: cards.map(c=>({n:c.n,en:c.en,zh:c.zh,upright:c.upright})), ts: Date.now() };
+  db.ref("tarot_draws/"+uid).push(payload).then(()=>{
+    saveState.textContent = "已保存到雲端 ✅";
+    saveState.className = "note ok";
+  }).catch(e=>{
+    saveState.textContent = "保存失敗 ❌ " + e.message;
+    saveState.className = "note err";
+  });
+}
+
+let historyRef = null;
+function attachHistoryListener(){
+  if(!db || !uid) return;
+  if(historyRef){ historyRef.off(); }
+  historyRef = db.ref("tarot_draws/"+uid).limitToLast(100);
+  historyRef.on("value", snap=>{
+    const val = snap.val() || {};
+    const entries = Object.entries(val).map(([key,v])=>({key,...v}));
+    entries.sort((a,b)=> (b.ts||0)-(a.ts||0));
+    historyList.innerHTML = "";
+    entries.forEach(e=>{
+      const li = document.createElement("li");
+      li.className = "item";
+      const when = e.ts ? new Date(e.ts).toLocaleString() : "";
+      li.innerHTML = `<div class="meta">${when}</div>` +
+        (Array.isArray(e.cards) ? e.cards.map((c,i)=>{
+          const label = ["過去","現在","未來"][i] || "";
+          return `<div class="note">${label?label+"：":""}${c.zh} (${c.en}) — <b>${c.upright?"正位":"逆位"}</b></div>`;
+        }).join("") : "");
+      historyList.appendChild(li);
+    });
+  });
+}
+
+// ===== Buttons =====
+draw1Btn.onclick = ()=>{
+  results.innerHTML='';
+  const c = drawOne();
+  renderCard(c);
+  saveDraw([c]);
+};
+draw3Btn.onclick = ()=>{
+  results.innerHTML='';
+  const labels = ['過去','現在','未來'];
+  const cs = [drawOne(), drawOne(), drawOne()];
+  cs.forEach((c,i)=> renderCard(c, labels[i]));
+  saveDraw(cs);
+};
+clearBtn.onclick = ()=> results.innerHTML = "";
+</script>
+</body>
+</html>
