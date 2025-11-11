@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Coin Intel Chat — 即時聊天室</title>
+<style>
+:root{--bg:#0b0f1a;--panel:#0e1630;--text:#eaf1ff;--muted:#9aa8c7;--accent:#5ee1ff;--accent2:#7cffb7;--bull:#7cffb7;--bear:#ff8b8b}
+*{box-sizing:border-box}
+body{margin:0;background:
+  radial-gradient(1000px 600px at 90% -10%,rgba(94,225,255,.12),transparent 60%),
+  radial-gradient(900px 600px at -20% 110%,rgba(124,255,183,.10),transparent 60%),var(--bg);
+  color:var(--text);font-family:system-ui,"Noto Sans TC","Segoe UI",Roboto,Arial}
+.container{max-width:880px;margin:0 auto;padding:16px}
+.header{display:flex;align-items:center;gap:12px;margin-bottom:12px}
+.header h1{margin:0;font-size:22px}
+.card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:16px;overflow:hidden}
+.topbar{display:flex;gap:10px;flex-wrap:wrap;padding:12px;border-bottom:1px solid rgba(255,255,255,.08)}
+input[type=text]{flex:1 1 160px;padding:10px 12px;border:1px solid rgba(255,255,255,.15);border-radius:10px;background:#0c1331;color:var(--text)}
+button{border:none;padding:10px 14px;border-radius:12px;background:linear-gradient(90deg,var(--accent),var(--accent2));color:#041923;font-weight:800;cursor:pointer}
+button.ghost{background:transparent;border:1px solid rgba(255,255,255,.2);color:var(--text)}
+.chat{height:60vh;min-height:360px;overflow:auto;padding:12px;display:flex;flex-direction:column;gap:10px}
+.msg{display:flex;gap:10px;align-items:flex-end}
+.bubble{max-width:78%;padding:10px 12px;border-radius:12px;background:#0f1b3f;border:1px solid rgba(255,255,255,.08)}
+.me .bubble{background:#0f2f3f}
+.meta{font-size:11px;color:var(--muted);margin-top:4px}
+.username{font-weight:700;color:#86f7ff}
+.sys{align-self:center;color:var(--muted);font-size:12px}
+.inputbar{display:flex;gap:10px;padding:12px;border-top:1px solid rgba(255,255,255,.08)}
+textarea{flex:1 1 auto;height:52px;padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.15);background:#0c1331;color:var(--text);resize:none}
+.small{font-size:12px;color:var(--muted);margin-top:8px}
+@media (max-width:720px){
+  .chat{height:62vh}
+  .bubble{max-width:85%}
+  .header h1{font-size:18px}
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1>💬 Coin Intel Chat</h1>
+    <a href="./" style="margin-left:auto;color:#5ee1ff;text-decoration:none">回到主頁</a>
+  </div>
+
+  <div class="card">
+    <div class="topbar">
+      <input id="nick" type="text" placeholder="你的暱稱（預設：Guest）">
+      <input id="room" type="text" placeholder="房間名稱（預設：global）">
+      <button id="join">加入 / 切換房間</button>
+      <button class="ghost" id="copyLink">複製房間連結</button>
+    </div>
+
+    <div id="chat" class="chat"></div>
+
+    <div class="inputbar">
+      <textarea id="text" placeholder="輸入訊息，按 Enter 送出（Shift+Enter 換行）"></textarea>
+      <button id="send">送出</button>
+    </div>
+  </div>
+
+  <p class="small">此聊天室使用 Firebase Realtime Database 即時同步。請勿洩漏私人資訊。若房間太吵可自訂房名（例如 <code>vip</code>、<code>tw</code>）。</p>
+</div>
+
+<!-- Firebase (compat CDN) -->
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
+
+<script>
+// === Firebase Config (from your project) ===
+const firebaseConfig = {
+  apiKey: "AIzaSyC4wMh3OF2yZC74P50HVSVC6juyiK_2iHY",
+  authDomain: "coin-intel-chat.firebaseapp.com",
+  databaseURL: "https://coin-intel-chat-default-rtdb.firebaseio.com",
+  projectId: "coin-intel-chat",
+  storageBucket: "coin-intel-chat.firebasestorage.app",
+  messagingSenderId: "829267717115",
+  appId: "1:829267717115:web:7b0ae1ad3f6289d923b95e",
+  measurementId: "G-VNEXPQY3G1"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+// === DOM helpers ===
+const $ = s => document.querySelector(s);
+const chat = $("#chat"), txt = $("#text"), nick = $("#nick"), room = $("#room");
+let roomRef = null, currentRoom = "global";
+let myId = Math.random().toString(36).slice(2,8);
+
+function addSys(text){
+  const s = document.createElement("div"); s.className="sys"; s.textContent = text;
+  chat.appendChild(s); chat.scrollTop = chat.scrollHeight;
+}
+function addMsg(m, isMe){
+  const row = document.createElement("div"); row.className = "msg"+(isMe?" me":"");
+  const bubble = document.createElement("div"); bubble.className = "bubble";
+  bubble.innerHTML = `<div class="username">${m.nick||"Guest"}</div>${(m.text||"").replace(/\\n/g,"<br>")}<div class="meta">${new Date(m.ts||Date.now()).toLocaleString()}</div>`;
+  row.appendChild(bubble); chat.appendChild(row); chat.scrollTop = chat.scrollHeight;
+}
+function join(newRoom){
+  if(roomRef){ roomRef.off(); }
+  currentRoom = newRoom || "global";
+  chat.innerHTML = "";
+  addSys(`你加入了房間 #${currentRoom}`);
+  roomRef = db.ref("rooms/"+currentRoom+"/messages");
+  roomRef.limitToLast(80).on("child_added", snap=>{
+    const m = snap.val()||{};
+    addMsg(m, m.clientId===myId);
+  });
+}
+txt.addEventListener("keydown",(e)=>{
+  if(e.key==="Enter" && !e.shiftKey){
+    e.preventDefault(); document.getElementById("send").click();
+  }
+});
+document.getElementById("send").onclick = ()=>{
+  const text = txt.value.trim();
+  if(!text) return;
+  const data = { nick: nick.value.trim()||"Guest", text, ts: Date.now(), clientId: myId };
+  db.ref("rooms/"+currentRoom+"/messages").push(data);
+  txt.value = "";
+};
+document.getElementById("join").onclick = ()=>{
+  const r = (room.value.trim()||"global");
+  join(r);
+  const url = new URL(location.href); url.searchParams.set("room", r);
+  history.replaceState({}, "", url.toString());
+};
+document.getElementById("copyLink").onclick = ()=>{
+  const url = new URL(location.href); url.searchParams.set("room", currentRoom);
+  navigator.clipboard.writeText(url.toString()).then(()=>addSys("已複製房間連結"));
+};
+// init from URL
+(function(){
+  const p = new URLSearchParams(location.search);
+  const r = p.get("room") || "global"; room.value = r; join(r);
+})();
+</script>
+</body>
+</html>
