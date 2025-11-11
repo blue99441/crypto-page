@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Binance Funding Rate Top 100（含 24h 量能 & OI）</title>
+<style>
+:root{
+  --bg:#0b0f1a;--panel:#101830;--text:#eaf1ff;--muted:#9aa8c7;
+  --accent:#5ee1ff;--accent2:#7cffb7;--bull:#7cffb7;--bear:#ff8b8b;
+}
+*{box-sizing:border-box}
+body{margin:0;background:
+  radial-gradient(1000px 600px at 90% -10%,rgba(94,225,255,.12),transparent 60%),
+  radial-gradient(900px 600px at -20% 110%,rgba(124,255,183,.10),transparent 60%),var(--bg);
+  color:var(--text);font-family:system-ui,"Noto Sans TC","Segoe UI",Roboto,Arial;padding:16px}
+.card{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);
+  border-radius:16px;padding:16px;box-shadow:0 10px 30px rgba(0,0,0,.4);max-width:1100px;margin:auto}
+h1{margin:0 0 8px;font-size:24px}
+.sub{margin:0 0 12px;color:var(--muted);font-size:13px}
+.controls{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+button{border:none;padding:10px 14px;border-radius:12px;background:linear-gradient(90deg,var(--accent),var(--accent2));
+  color:#041923;font-weight:800;cursor:pointer}
+.ghost{background:transparent;border:1px solid rgba(255,255,255,.2);color:var(--text)}
+.muted{color:var(--muted);font-size:13px}
+.tableWrap{overflow:auto;margin-top:10px}
+table{width:100%;border-collapse:separate;border-spacing:0 8px;min-width:860px}
+th,td{text-align:left;padding:10px 12px;white-space:nowrap}
+thead th{color:var(--muted);font-size:12px;position:sticky;top:0;background:rgba(16,24,48,.9);backdrop-filter:blur(6px)}
+tbody tr{background:#0d1533;border:1px solid rgba(255,255,255,.08)}
+tbody tr td:first-child{border-top-left-radius:10px;border-bottom-left-radius:10px}
+tbody tr td:last-child{border-top-right-radius:10px;border-bottom-right-radius:10px}
+.rank{font-weight:800;color:var(--accent)}
+.sym{font-weight:800;font-size:16px}
+.ratePos{color:var(--bull);font-weight:800}
+.rateNeg{color:var(--bear);font-weight:800}
+.badge{display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid rgba(255,255,255,.2);font-size:11px}
+.pos{color:var(--bull);border-color:rgba(124,255,183,.35);background:rgba(124,255,183,.12)}
+.neg{color:#ffd2d2;border-color:rgba(255,139,139,.35);background:rgba(255,139,139,.12)}
+.footer{margin-top:10px}
+.sort{display:flex;gap:8px;align-items:center}
+select,input{padding:8px 10px;border-radius:10px;border:1px solid rgba(255,255,255,.12);background:#0c1331;color:var(--text)}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>Binance Funding Rate Top 100（絕對值排序）</h1>
+  <p class="sub">USDT 永續合約｜同表顯示「正／負資金費率」最極端前 100 名。含 <b>24h 量能</b> 與 <b>Open Interest</b>。綠=偏多、紅=偏空。風控才是你的止滑墊 🛡️。</p>
+
+  <div class="controls">
+    <button id="refresh">更新資料</button>
+    <button class="ghost" id="copy">複製榜單</button>
+    <div class="sort">
+      <span class="muted">次序：</span>
+      <select id="order">
+        <option value="abs">依資金費率絕對值</option>
+        <option value="pos">僅正資金費率由高到低</option>
+        <option value="neg">僅負資金費率由低到高（更負更前）</option>
+        <option value="score">綜合分數（|FR| × log10(量能USDT+1) × log10(OI+1)）</option>
+      </select>
+      <span class="muted">最少 24h 量能（USDT）：</span><input id="minVol" type="number" placeholder="例如 10000000" style="width:160px">
+      <span class="muted">最少 OI（USDT）：</span><input id="minOi" type="number" placeholder="例如 5000000" style="width:160px">
+    </div>
+  </div>
+
+  <div id="time" class="muted">更新時間：—</div>
+
+  <div class="tableWrap">
+    <table>
+      <thead>
+        <tr>
+          <th>#</th><th>Symbol</th><th>Funding Rate</th><th>方向</th><th>24h 量能 (USDT)</th><th>Open Interest</th><th>資料時間</th>
+        </tr>
+      </thead>
+      <tbody id="rows">
+        <tr><td colspan="7" class="muted">讀取中…</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p class="muted footer">資料來源：
+    <a href="https://fapi.binance.com/fapi/v1/premiumIndex" target="_blank" style="color:#5ee1ff">premiumIndex</a>（Funding）／
+    <a href="https://fapi.binance.com/fapi/v1/exchangeInfo" target="_blank" style="color:#5ee1ff">exchangeInfo</a>（合約清單）／
+    <a href="https://fapi.binance.com/fapi/v1/ticker/24hr" target="_blank" style="color:#5ee1ff">ticker/24hr</a>（量能）／
+    <a href="https://fapi.binance.com/fapi/v1/openInterest" target="_blank" style="color:#5ee1ff">openInterest</a>（OI）
+    ｜結果僅供參考，非投資建議。
+  </p>
+</div>
+
+<script>
+const fmtPct = v => v==null? "—" : (v*100).toFixed(4) + "%";
+const timeStr = d => d? new Date(d).toLocaleString() : "—";
+function fmtNum(n, digits=2){
+  if(n==null||isNaN(n)) return "—";
+  if(n>=1e9) return (n/1e9).toFixed(digits)+"B";
+  if(n>=1e6) return (n/1e6).toFixed(digits)+"M";
+  if(n>=1e3) return (n/1e3).toFixed(digits)+"K";
+  return Number(n).toFixed(digits);
+}
+
+async function fetchPerpUSDT(){
+  const res=await fetch("https://fapi.binance.com/fapi/v1/exchangeInfo");
+  const data=await res.json();
+  return data.symbols
+    .filter(s=>s.contractType==="PERPETUAL" && s.quoteAsset==="USDT")
+    .map(s=>s.symbol);
+}
+async function fetchFundingAll(){
+  const res=await fetch("https://fapi.binance.com/fapi/v1/premiumIndex");
+  const data=await res.json();
+  return data.map(x=>({
+    symbol:x.symbol, lastFundingRate: x.lastFundingRate ? parseFloat(x.lastFundingRate) : null,
+    time: x.time ? new Date(x.time) : (x.nextFundingTime ? new Date(x.nextFundingTime) : null)
+  }));
+}
+async function fetchTicker24hrAll(){
+  const res=await fetch("https://fapi.binance.com/fapi/v1/ticker/24hr");
+  const data=await res.json();
+  // quoteVolume is in USDT for USDT pairs
+  const map=new Map();
+  for(const x of data){
+    map.set(x.symbol, {quoteVolume: parseFloat(x.quoteVolume||"0")});
+  }
+  return map;
+}
+
+async function fetchOpenInterestBatch(symbols){
+  // openInterest endpoint needs per-symbol; batch with throttling
+  const chunk = 25;
+  const map = new Map();
+  for(let i=0;i<symbols.length;i+=chunk){
+    const group = symbols.slice(i,i+chunk);
+    const promises = group.map(async s=>{
+      try{
+        const res = await fetch(`https://fapi.binance.com/fapi/v1/openInterest?symbol=${s}`);
+        const data = await res.json();
+        map.set(s, {openInterest: parseFloat(data.openInterest||"0")});
+      }catch(e){
+        map.set(s, {openInterest: 0});
+      }
+    });
+    await Promise.all(promises);
+    // small delay to be polite
+    await new Promise(r=>setTimeout(r, 150));
+  }
+  return map;
+}
+
+function compositeScore(item){
+  const fr = Math.abs(item.lastFundingRate||0);
+  const vol = Math.max(0, item.quoteVolume||0);
+  const oi = Math.max(0, item.openInterest||0);
+  const lv = Math.log10(vol+1);
+  const lo = Math.log10(oi+1);
+  return fr * lv * lo;
+}
+
+async function load(){
+  const rows=document.querySelector("#rows");
+  rows.innerHTML = "<tr><td colspan='7' class='muted'>讀取中…</td></tr>";
+  try{
+    const [perp, funding, tickers] = await Promise.all([fetchPerpUSDT(), fetchFundingAll(), fetchTicker24hrAll()]);
+    const allowed = new Set(perp);
+    const joined = funding
+      .filter(x=>allowed.has(x.symbol) && x.lastFundingRate!==null)
+      .map(x=>({ ...x, quoteVolume: (tickers.get(x.symbol)||{}).quoteVolume || 0 }));
+
+    // Fetch OI for the joined list (only the ones we care about)
+    const oiMap = await fetchOpenInterestBatch(joined.map(x=>x.symbol));
+    joined.forEach(x=>{
+      x.openInterest = (oiMap.get(x.symbol)||{}).openInterest || 0;
+    });
+
+    // Filter by min volume / OI if provided
+    const minVol = Number(document.querySelector("#minVol").value||"0");
+    const minOi = Number(document.querySelector("#minOi").value||"0");
+    let filtered = joined.filter(x=> x.quoteVolume >= minVol && x.openInterest >= minOi);
+
+    // Sorting
+    const order = document.querySelector("#order").value;
+    if(order==="abs"){
+      filtered.sort((a,b)=> Math.abs(b.lastFundingRate) - Math.abs(a.lastFundingRate));
+    }else if(order==="pos"){
+      filtered = filtered.filter(x=> x.lastFundingRate>0).sort((a,b)=> b.lastFundingRate - a.lastFundingRate);
+    }else if(order==="neg"){
+      filtered = filtered.filter(x=> x.lastFundingRate<0).sort((a,b)=> a.lastFundingRate - b.lastFundingRate); // more negative first
+    }else if(order==="score"){
+      filtered.sort((a,b)=> compositeScore(b) - compositeScore(a));
+    }
+
+    const topN = filtered.slice(0,100);
+    const tbody = [];
+    topN.forEach((x,i)=>{
+      const isPos = x.lastFundingRate>=0;
+      tbody.push(`<tr>
+        <td class="rank">#${i+1}</td>
+        <td class="sym">${x.symbol}</td>
+        <td class="${isPos?'ratePos':'rateNeg'}">${fmtPct(x.lastFundingRate)}</td>
+        <td><span class="badge ${isPos?'pos':'neg'}">${isPos?'偏多':'偏空'}</span></td>
+        <td>${fmtNum(x.quoteVolume,2)}</td>
+        <td>${fmtNum(x.openInterest,2)}</td>
+        <td>${timeStr(x.time)}</td>
+      </tr>`);
+    });
+    rows.innerHTML = tbody.join("") || `<tr><td colspan="7" class="muted">（無符合條件結果，請調整篩選）</td></tr>`;
+
+    document.querySelector("#time").textContent="更新時間："+new Date().toLocaleString();
+    window._result = {order, minVol, minOi, list: topN};
+  }catch(e){
+    rows.innerHTML = `<tr><td colspan="7" class="muted">讀取失敗：${e}</td></tr>`;
+  }
+}
+
+document.querySelector("#refresh").onclick = load;
+document.querySelector("#order").onchange = load;
+document.querySelector("#minVol").onchange = load;
+document.querySelector("#minOi").onchange = load;
+
+document.querySelector("#copy").onclick = ()=>{
+  if(!window._result){ alert("請先更新資料"); return; }
+  const {order, minVol, minOi, list} = window._result;
+  const head = `Binance Funding Rate Top 100（${new Date().toLocaleString()}）\n排序：${order}，minVol=${minVol}, minOi=${minOi}\n`;
+  const lines = list.map((x,i)=>`#${i+1} ${x.symbol} ${fmtPct(x.lastFundingRate)} ${x.lastFundingRate>=0?'+Long':'-Short'} Vol=${Math.round(x.quoteVolume)} OI=${Math.round(x.openInterest)}`);
+  navigator.clipboard.writeText(head + lines.join("\n") + "\n#Binance #Futures #Crypto");
+  alert("已複製榜單");
+};
+
+load();
+</script>
+</body>
+</html>
