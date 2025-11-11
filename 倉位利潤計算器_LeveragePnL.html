@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>倉位利潤計算器</title>
+<style>
+  :root { --bg:#0f1220; --card:#161a2b; --text:#e7e9f1; --muted:#9aa3b2; --accent:#7aa2ff; --good:#19c37d; --bad:#ff6b6b; }
+  *{box-sizing:border-box}
+  body{margin:0;background:linear-gradient(180deg,#0b0e1a,#11152a);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,"Apple Color Emoji","Segoe UI Emoji";}
+  header{padding:24px 16px;text-align:center}
+  h1{margin:0;font-size:clamp(20px,2.3vw,28px);letter-spacing:.5px}
+  .wrap{max-width:980px;margin:0 auto;padding:16px}
+  .card{background:var(--card);border:1px solid rgba(255,255,255,.06);border-radius:14px;padding:18px;margin-bottom:16px;box-shadow:0 10px 30px rgba(0,0,0,.35)}
+  .grid{display:grid;grid-template-columns:repeat(12,1fr);gap:14px}
+  .col-6{grid-column:span 6}
+  .col-4{grid-column:span 4}
+  .col-3{grid-column:span 3}
+  .col-8{grid-column:span 8}
+  .col-12{grid-column:span 12}
+  @media (max-width:860px){.col-6,.col-4,.col-3,.col-8,.col-12{grid-column:span 12}}
+  label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px}
+  input,select{width:100%;padding:12px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.08);background:#0f1330;color:var(--text);outline:none}
+  input:focus,select:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(122,162,255,.15)}
+  .row{display:flex;gap:8px;align-items:center}
+  .muted{color:var(--muted);font-size:12px}
+  .out{display:flex;justify-content:space-between;align-items:center;background:#0d1128;border:1px solid rgba(255,255,255,.06);padding:12px 14px;border-radius:10px}
+  .out b{font-size:18px}
+  .pill{display:inline-flex;gap:8px;background:#0c1130;border:1px solid rgba(255,255,255,.08);padding:6px;border-radius:999px}
+  .pill button{border:0;background:transparent;color:var(--muted);padding:8px 12px;border-radius:999px;cursor:pointer}
+  .pill button.active{background:var(--accent);color:#0a0d1f;font-weight:700}
+  .btn{cursor:pointer;background:var(--accent);border:0;color:#0b0f1f;border-radius:12px;padding:12px 16px;font-weight:700}
+  .good{color:var(--good)} .bad{color:var(--bad)}
+  footer{opacity:.75;text-align:center;padding:16px 8px;font-size:12px;color:var(--muted)}
+  .small{font-size:12px;color:var(--muted)}
+</style>
+</head>
+<body>
+  <header>
+    <h1>倉位利潤計算器 — 合約/槓桿</h1>
+    <div class="small">輸入本金、槓桿、進場/目標價格與方向，立即計算部位數量、盈虧與 ROE</div>
+  </header>
+
+  <div class="wrap">
+    <div class="card">
+      <div class="grid">
+        <div class="col-12">
+          <label>方向</label>
+          <div class="pill" id="dirPill">
+            <button data-dir="long" class="active">做多 (Long)</button>
+            <button data-dir="short">做空 (Short)</button>
+          </div>
+        </div>
+
+        <div class="col-3">
+          <label>本金 (USDT)</label>
+          <input id="margin" type="number" step="0.01" placeholder="如 1000" value="1000" />
+        </div>
+        <div class="col-3">
+          <label>槓桿 (x)</label>
+          <input id="lev" type="number" step="0.1" placeholder="如 10" value="10" />
+        </div>
+        <div class="col-3">
+          <label>進場價</label>
+          <input id="entry" type="number" step="0.0001" placeholder="如 2000" value="2000" />
+        </div>
+        <div class="col-3">
+          <label>目標/平倉價</label>
+          <input id="exit" type="number" step="0.0001" placeholder="如 2200" value="2200" />
+        </div>
+
+        <div class="col-4">
+          <label>手續費率 (每邊)</label>
+          <input id="fee" type="number" step="0.0001" placeholder="如 0.0006 代表 0.06%" value="0.0006" />
+          <div class="muted">預設 taker 0.06%（雙邊計）</div>
+        </div>
+        <div class="col-8">
+          <label>備註</label>
+          <div class="muted">此為一般化計算：忽略資金費、滑點與爆倉價差異。數值僅供參考，請自行評估風險。</div>
+        </div>
+      </div>
+      <div style="margin-top:14px" class="row">
+        <button class="btn" id="calc">立即計算</button>
+        <span class="muted">輸入變更會自動更新</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="grid">
+        <div class="col-6">
+          <div class="out"><span class="muted">部位面額 (USDT)</span><b id="notional">—</b></div>
+        </div>
+        <div class="col-6">
+          <div class="out"><span class="muted">數量 (幣)</span><b id="qty">—</b></div>
+        </div>
+        <div class="col-6">
+          <div class="out"><span class="muted">價格變動 (%)</span><b id="pct">—</b></div>
+        </div>
+        <div class="col-6">
+          <div class="out"><span class="muted">手續費 (雙邊)</span><b id="fees">—</b></div>
+        </div>
+        <div class="col-6">
+          <div class="out"><span class="muted">毛利潤 (PnL)</span><b id="pnlGross">—</b></div>
+        </div>
+        <div class="col-6">
+          <div class="out"><span class="muted">淨利潤 (扣手續費)</span><b id="pnlNet">—</b></div>
+        </div>
+        <div class="col-12">
+          <div class="out"><span class="muted">ROE (淨)</span><b id="roe">—</b></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="muted">
+        計算公式：<br/>
+        數量 = (本金 × 槓桿) ÷ 進場價；&nbsp;
+        毛 PnL (做多) = (平倉價 − 進場價) × 數量；(做空) = (進場價 − 平倉價) × 數量。<br/>
+        手續費 = (進場面額 + 平倉面額) × 費率；淨 PnL = 毛 PnL − 手續費；ROE = 淨 PnL ÷ 本金。
+      </div>
+    </div>
+  </div>
+
+  <footer>© 2025 Leverage PnL Helper — DYOR / 高槓桿高風險，請謹慎使用</footer>
+
+<script>
+const $ = sel => document.querySelector(sel);
+const fmt = (n, d=2) => isFinite(n) ? Number(n).toLocaleString(undefined,{maximumFractionDigits:d}) : "—";
+
+let state = { dir: 'long' };
+
+function getInputs(){
+  const margin = parseFloat($('#margin').value);
+  const lev    = parseFloat($('#lev').value);
+  const entry  = parseFloat($('#entry').value);
+  const exit   = parseFloat($('#exit').value);
+  const fee    = parseFloat($('#fee').value);
+  return {margin, lev, entry, exit, fee, dir: state.dir};
+}
+
+function calc(){
+  const {margin, lev, entry, exit, fee, dir} = getInputs();
+  if([margin,lev,entry,exit,fee].some(v => !isFinite(v) || v<=0)){ displayEmpty(); return; }
+
+  const notional = margin * lev;
+  const qty = notional / entry;
+  const priceDiff = (dir==='long') ? (exit - entry) : (entry - exit);
+  const pnlGross = priceDiff * qty;
+  const fees = (entry*qty + exit*qty) * fee;
+  const pnlNet = pnlGross - fees;
+  const pctMove = ((exit - entry) / entry) * 100;
+  const roe = (pnlNet / margin) * 100;
+
+  $('#notional').textContent = fmt(notional,2);
+  $('#qty').textContent      = fmt(qty,6);
+  const pctEl = $('#pct');
+  pctEl.textContent = fmt(pctMove,4) + '%';
+  pctEl.className = ' ' + (pctMove * (dir==='long'?1:-1) >= 0 ? 'good' : 'bad');
+  const g = $('#pnlGross');
+  const n = $('#pnlNet');
+  g.textContent = (pnlGross>=0?'+':'') + fmt(pnlGross,2);
+  n.textContent = (pnlNet>=0?'+':'') + fmt(pnlNet,2);
+  g.className = pnlGross>=0 ? 'good' : 'bad';
+  n.className = pnlNet>=0 ? 'good' : 'bad';
+  const roeEl = $('#roe');
+  roeEl.textContent = (roe>=0?'+':'') + fmt(roe,2) + '%';
+  roeEl.className = roe>=0 ? 'good' : 'bad';
+  $('#fees').textContent = '-' + fmt(fees,2);
+}
+
+function displayEmpty(){
+  ['#notional','#qty','#pct','#fees','#pnlGross','#pnlNet','#roe'].forEach(id=>{
+    const el = $(id); el.textContent = '—'; el.className='';
+  });
+}
+
+function bindDir(){
+  const pill = document.getElementById('dirPill');
+  pill.addEventListener('click', e=>{
+    if(e.target.tagName!=='BUTTON') return;
+    [...pill.children].forEach(b=>b.classList.remove('active'));
+    e.target.classList.add('active');
+    state.dir = e.target.dataset.dir;
+    calc();
+  });
+}
+
+function bindInputs(){
+  ['#margin','#lev','#entry','#exit','#fee'].forEach(id=>{
+    $(id).addEventListener('input', calc);
+  });
+  $('#calc').addEventListener('click', calc);
+}
+
+bindDir();
+bindInputs();
+calc();
+</script>
+</body>
+</html>
