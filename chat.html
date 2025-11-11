@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Coin Intel Chat — 即時聊天室</title>
+<title>Coin Intel Chat — 即時聊天室（含圖片上傳）</title>
 <style>
 :root{--bg:#0b0f1a;--text:#eaf1ff;--muted:#9aa8c7;--accent:#5ee1ff;--accent2:#7cffb7}
 *{box-sizing:border-box}
@@ -20,7 +20,7 @@ a.link{margin-left:auto;color:#5ee1ff;text-decoration:none}
 input[type=text]{flex:1 1 160px;padding:10px 12px;border:1px solid rgba(255,255,255,.15);border-radius:10px;background:#0c1331;color:var(--text)}
 button{border:none;padding:10px 14px;border-radius:12px;background:linear-gradient(90deg,var(--accent),var(--accent2));color:#041923;font-weight:800;cursor:pointer}
 button.ghost{background:transparent;border:1px solid rgba(255,255,255,.2);color:var(--text)}
-.chat{height:60vh;min-height:360px;overflow:auto;padding:12px;display:flex;flex-direction:column;gap:10px}
+.chat{height:58vh;min-height:360px;overflow:auto;padding:12px;display:flex;flex-direction:column;gap:10px}
 .msg{display:flex;gap:10px;align-items:flex-end}
 .bubble{max-width:78%;padding:10px 12px;border-radius:12px;background:#0f1b3f;border:1px solid rgba(255,255,255,.08)}
 .me .bubble{background:#0f2f3f}
@@ -28,9 +28,13 @@ button.ghost{background:transparent;border:1px solid rgba(255,255,255,.2);color:
 .username{font-weight:700;color:#86f7ff}
 .sys{align-self:center;color:#9aa8c7;font-size:12px}
 .err{align-self:center;color:#ffb3b3;font-size:12px}
-.inputbar{display:flex;gap:10px;padding:12px;border-top:1px solid rgba(255,255,255,.08)}
-textarea{flex:1 1 auto;height:52px;padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.15);background:#0c1331;color:var(--text);resize:none}
+.inputbar{display:flex;gap:10px;padding:12px;border-top:1px solid rgba(255,255,255,.08);flex-wrap:wrap}
+textarea{flex:1 1 320px;height:52px;padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.15);background:#0c1331;color:#eaf1ff;resize:none}
 .small{font-size:12px;color:var(--muted);margin-top:8px}
+.img{max-width:100%;border-radius:10px;border:1px solid rgba(255,255,255,.12);display:block}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.progress{height:6px;background:#11224e;border-radius:999px;overflow:hidden;flex:1 1 120px;min-width:120px}
+.progress>div{height:100%;width:0;background:linear-gradient(90deg,#5ee1ff,#7cffb7)}
 @media (max-width:720px){
   .chat{height:62vh}
   .bubble{max-width:85%}
@@ -57,19 +61,25 @@ textarea{flex:1 1 auto;height:52px;padding:10px 12px;border-radius:10px;border:1
 
     <div class="inputbar">
       <textarea id="text" placeholder="輸入訊息，按 Enter 送出（Shift+Enter 換行）"></textarea>
+      <div class="row">
+        <input id="file" type="file" accept="image/*" style="display:none">
+        <button id="pick" class="ghost">📷 上傳圖片</button>
+        <div class="progress" id="pg" style="display:none"><div id="pgbar"></div></div>
+      </div>
       <button id="send">送出</button>
     </div>
   </div>
 
-  <p class="small">此聊天室使用 Firebase Realtime Database 即時同步。</p>
+  <p class="small">• 支援上傳圖片（預設 5MB 以內）。<br>• 若顯示離線，請確認 Realtime Database 與 Storage 已啟用且規則允許讀寫（測試期可先全開）。</p>
 </div>
 
 <!-- Firebase compat CDN -->
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-storage-compat.js"></script>
 
 <script>
-// === Firebase 設定（最終正確網址）===
+// === 你的 Firebase 設定（含正確 databaseURL）===
 const firebaseConfig = {
   apiKey: "AIzaSyC4wMh3OF2yZC74P50HVSVC6juyiK_2iHY",
   authDomain: "coin-intel-chat.firebaseapp.com",
@@ -82,12 +92,16 @@ const firebaseConfig = {
 };
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
+const storage = firebase.storage();
 
+// === DOM ===
 const $ = s => document.querySelector(s);
 const chat = $("#chat"), txt = $("#text"), nick = $("#nick"), room = $("#room");
+const fileInput = $("#file"), pickBtn = $("#pick"), pg = $("#pg"), pgbar = $("#pgbar");
 let roomRef = null, currentRoom = "global";
 let myId = Math.random().toString(36).slice(2,8);
 
+// 暱稱持久化
 (function(){
   const savedNick = localStorage.getItem("chat_nick");
   if(savedNick) nick.value = savedNick;
@@ -101,17 +115,27 @@ function addRow(cls,text){
 function addSys(t){ addRow("sys", t); }
 function addErr(t){ addRow("err", t); }
 
+function escapeHTML(s){return s.replace(/[&<>"']/g,m=>({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[m]))}
+
 function addMsg(m, isMe){
   const row = document.createElement("div"); row.className = "msg"+(isMe?" me":"");
   const bubble = document.createElement("div"); bubble.className = "bubble";
-  bubble.innerHTML = `<div class="username">${m.nick||"Guest"}</div>${(m.text||"").replace(/\\n/g,"<br>")}<div class="meta">${new Date(m.ts||Date.now()).toLocaleString()}</div>`;
+  let body = `<div class="username">${escapeHTML(m.nick||"Guest")}</div>`;
+  if(m.imgUrl){
+    body += `<a href="${m.imgUrl}" target="_blank"><img class="img" src="${m.imgUrl}" alt="${escapeHTML(m.imgName||'image')}"></a>`;
+    if(m.text){ body += `<div>${escapeHTML(m.text)}</div>`; }
+  }else{
+    body += (escapeHTML(m.text||"")).replace(/\\n/g,"<br>");
+  }
+  body += `<div class="meta">${new Date(m.ts||Date.now()).toLocaleString()}</div>`;
+  bubble.innerHTML = body;
   row.appendChild(bubble); chat.appendChild(row); chat.scrollTop = chat.scrollHeight;
 }
 
 function bindConnectionIndicator(){
   db.ref(".info/connected").on("value", s=>{
     if(s.val()===true){ addSys("✅ 已連線 Firebase"); }
-    else{ addErr("❌ 離線中（請確認安全規則允許讀寫）"); }
+    else{ addErr("❌ 離線中（請確認資料庫規則與 Storage 規則）"); }
   });
 }
 
@@ -128,13 +152,7 @@ function join(newRoom){
   bindConnectionIndicator();
 }
 
-txt.addEventListener("keydown",(e)=>{
-  if(e.key==="Enter" && !e.shiftKey){
-    e.preventDefault(); document.getElementById("send").click();
-  }
-});
-
-document.getElementById("send").onclick = ()=>{
+function sendText(){
   const textVal = txt.value.trim();
   if(!textVal) return;
   const n = (nick.value.trim() || "Guest").slice(0,24);
@@ -142,8 +160,47 @@ document.getElementById("send").onclick = ()=>{
   const data = { nick: n, text: textVal.slice(0,1000), ts: Date.now(), clientId: myId };
   db.ref("rooms/"+currentRoom+"/messages").push(data)
     .then(()=>{ txt.value=""; })
-    .catch(err=> addErr("寫入失敗："+err.message+"（請確認資料庫規則允許）"));
-};
+    .catch(err=> addErr("文字寫入失敗："+err.message));
+}
+
+function sendImage(file){
+  if(!file) return;
+  if(file.size > 5*1024*1024){ addErr("圖片太大，請小於 5MB"); return; }
+  const n = (nick.value.trim() || "Guest").slice(0,24);
+  localStorage.setItem("chat_nick", n);
+  const key = `${Date.now()}-${Math.random().toString(36).slice(2,8)}-${file.name}`;
+  const path = `rooms/${currentRoom}/uploads/${key}`;
+  const ref = storage.ref(path);
+  const task = ref.put(file, {contentType:file.type||"image/*"});
+  pg.style.display="block";
+  task.on("state_changed",
+    (snap)=>{
+      const p = Math.round((snap.bytesTransferred/snap.totalBytes)*100);
+      pgbar.style.width = p + "%";
+    },
+    (err)=>{ addErr("上傳失敗："+err.message); pg.style.display="none"; pgbar.style.width="0"; },
+    ()=>{
+      task.snapshot.ref.getDownloadURL().then((url)=>{
+        const data = {
+          nick: n, ts: Date.now(), clientId: myId,
+          imgUrl: url, imgName: file.name, imgSize: file.size,
+          text: txt.value.trim().slice(0,300) || null
+        };
+        db.ref("rooms/"+currentRoom+"/messages").push(data)
+          .then(()=>{ txt.value=""; pg.style.display="none"; pgbar.style.width="0"; })
+          .catch(err=> addErr("訊息寫入失敗："+err.message));
+      });
+    }
+  );
+}
+
+// events
+document.getElementById("send").onclick = sendText;
+txt.addEventListener("keydown",(e)=>{
+  if(e.key==="Enter" && !e.shiftKey){
+    e.preventDefault(); sendText();
+  }
+});
 
 document.getElementById("join").onclick = ()=>{
   const r = (room.value.trim()||"global");
@@ -157,7 +214,12 @@ document.getElementById("copyLink").onclick = ()=>{
   navigator.clipboard.writeText(url.toString()).then(()=>addSys("已複製房間連結"));
 };
 
+pickBtn.onclick = ()=> fileInput.click();
+fileInput.onchange = ()=> sendImage(fileInput.files[0]);
+
+// init
 join(room.value.trim() || "global");
 </script>
+
 </body>
 </html>
