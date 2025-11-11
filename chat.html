@@ -68,6 +68,11 @@ button.ghost{background:transparent;border:1px solid var(--line);color:#d9e6ff}
       </div>
 
       <div class="row" style="margin-bottom:4px">
+      <div class="row" style="margin-bottom:6px">
+        <button id="btnDice">🎲 漲跌骰子</button>
+        <button id="btnFortune">🔮 每日占卜</button>
+      </div>
+
         <button id="toggleEmoji" class="emojiToggle">😊 表情</button>
         <div id="emojiBar" class="emojiBar"></div>
       </div>
@@ -119,6 +124,8 @@ const saveNickBtn = document.getElementById("saveNick");
 const jumpLatest = document.getElementById("jumpLatest");
 const emojiBar = document.getElementById("emojiBar");
 const toggleEmojiBtn = document.getElementById("toggleEmoji");
+const btnDice = document.getElementById("btnDice");
+const btnFortune = document.getElementById("btnFortune");
 const refreshLB = document.getElementById("refreshLB");
 const leaderboard = document.getElementById("leaderboard");
 const toast = document.getElementById("toast");
@@ -133,7 +140,7 @@ let myNick = "Guest";
 function showToast(t){ toast.textContent=t; toast.style.display='block'; setTimeout(()=> toast.style.display='none',1800); }
 function levelFromXp(xp){ return Math.floor(Math.sqrt((xp||0)/50)) + 1; }
 function setInputEnabled(enabled){
-  [msg, send, nickInput, saveNickBtn].forEach(el=>{ el.disabled = !enabled; });
+  [msg, send, nickInput, saveNickBtn, btnDice, btnFortune].forEach(el=>{ if(el) el.disabled = !enabled; });
 }
 function setAuthUi(user){
   if(user){
@@ -375,6 +382,50 @@ function escapeHtml(s){ return (s||"").replace(/[&<>"']/g, m=>({ "&":"&amp;","<"
 
 // Init
 loadLeaderboard();
+
+// === Quick Actions (Dice & Daily Fortune) ===
+function doDice(){
+  if(!myId){ alert("請先登入再使用"); return; }
+  const picks = [
+    {dir:"多", emoji:"🚀"},
+    {dir:"空", emoji:"🪂"}
+  ];
+  const pick = picks[Math.floor(Math.random()*picks.length)];
+  const conf = Math.floor(Math.random()*49)+51; // 51-99%
+  const text = `🎲 漲跌骰子：傾向【${pick.dir}】（信心 ${conf}%） ${pick.emoji}`;
+  const m={nick:nickInput.value || "Guest", text, ts:Date.now(), id:myId};
+  ref.push(m).then(()=>{ awardXpOnMessage(); }).catch(e=> alert("❌ 寫入失敗："+e.code+"\n"+e.message));
+}
+
+function doDailyFortune(){
+  if(!myId){ alert("請先登入再使用"); return; }
+  const pool = [
+    "少看盤，多睡覺。",
+    "今天別追高，讓價格來找你。",
+    "停損只是門票，留子彈打下一局。",
+    "慢就是快，急會虧。",
+    "看懂風險，收益自然來。",
+    "逢低不等於抄底，等確認。",
+    "現金也是部位。",
+    "分批進出，情緒降噪。",
+    "目標先小後大，先求活著。",
+    "拉回是機會，不是義務。"
+  ];
+  // Deterministic pick per user per day
+  const now = new Date();
+  const key = (myId||"guest") + "-" + now.getFullYear()+"/"+(now.getMonth()+1)+"/"+now.getDate();
+  let h=0; for(let i=0;i<key.length;i++){ h = (h*31 + key.charCodeAt(i)) >>> 0; }
+  const idx = h % pool.length;
+  const stars = "★★★★★☆☆☆☆☆".slice(5 - (h%5))  // pseudo-random 1-5
+  const text = `🔮 今日占卜：${pool[idx]}｜幸運指標 ${"★".repeat((h%5)+1)}`;
+  const m={nick:nickInput.value || "Guest", text, ts:Date.now(), id:myId};
+  ref.push(m).then(()=>{ awardXpOnMessage(); }).catch(e=> alert("❌ 寫入失敗："+e.code+"\n"+e.message));
+}
+
+// wire up
+if(btnDice) btnDice.onclick = doDice;
+if(btnFortune) btnFortune.onclick = doDailyFortune;
+
 </script>
 </body>
 </html>
