@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Alpha Signal — 主力訊號加強版（單頁）</title>
+<style>
+  :root{
+    --bg:#0b1220;--card:#0f172a;--text:#e5e7eb;--muted:#9ca3af;--accent:#22d3ee;
+    --good:#34d399;--bad:#f87171;--warn:#fbbf24;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:16px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto}
+  header{position:sticky;top:0;z-index:5;background:linear-gradient(180deg,rgba(11,18,32,.95),rgba(11,18,32,.7));backdrop-filter: blur(6px);}
+  .wrap{max-width:1100px;margin:0 auto;padding:16px}
+  .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+  input,button,select{background:#0b1730;color:var(--text);border:1px solid #26324b;border-radius:10px;padding:10px 12px}
+  button{background:linear-gradient(90deg,#22d3ee33,#22d3ee55);border-color:#22d3ee55;cursor:pointer}
+  button:disabled{opacity:.6;cursor:not-allowed}
+  .mini{height:110px;border:1px solid #1d2942;border-radius:12px;padding:6px;background:linear-gradient(180deg,#0d162d,#0c1427)}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin:14px 0}
+  .card{background:var(--card);border:1px solid #1d2942;border-radius:14px;padding:14px}
+  .title{font-weight:700;margin:0 0 6px}
+  .muted{color:var(--muted);font-size:13px}
+  .k{height:100%;width:100%}
+  .signal{font-weight:800}
+  .up{color:var(--good)} .down{color:var(--bad)} .warn{color:var(--warn)}
+  .hint{font-size:13px;color:#93c5fd}
+  .flex{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .mono{font-family:ui-monospace,Consolas,Menlo,monospace}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <div class="row">
+      <div style="font-weight:800;font-size:18px">📈 Alpha Signal — 主力訊號</div>
+      <div class="flex">
+        交易對：<input id="symbol" value="BTCUSDT" style="width:120px" />
+        <button id="refresh">更新</button>
+        <label class="muted"><input id="auto" type="checkbox"/> 自動刷新(30s)</label>
+      </div>
+    </div>
+    <div class="mini"><canvas id="spark"></canvas></div>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="cards">
+    <section class="card">
+      <h3 class="title">即時概覽</h3>
+      <div id="overview" class="mono">--</div>
+      <div class="muted" id="stamp">--</div>
+    </section>
+
+    <section class="card">
+      <h3 class="title">主力訊號</h3>
+      <div id="whales" class="signal">--</div>
+      <div class="muted" id="whales-desc">Taker 多空比、OI 變化、與 1h 價格動能綜合判讀。</div>
+    </section>
+
+    <section class="card">
+      <h3 class="title">資金費與基差</h3>
+      <div id="funding" class="mono">--</div>
+      <div class="muted">來源：Binance Futures premiumIndex / fundingRate</div>
+    </section>
+
+    <section class="card">
+      <h3 class="title">未平倉量 OI</h3>
+      <div id="oi" class="mono">--</div>
+      <div class="muted">近 1 小時 OI 變化，結合價格動向判斷新增/回補。</div>
+    </section>
+  </div>
+
+  <section class="card">
+    <h3 class="title">方法（快速）</h3>
+    <ol class="muted">
+      <li>taker 多空比（近 1h）：&gt;1.05 偏多、&lt;0.95 偏空。</li>
+      <li>OI 與價格判讀：
+        <span class="mono">OI↑ 價↑ = 多新增</span>、
+        <span class="mono">OI↑ 價↓ = 空新增</span>、
+        <span class="mono">OI↓ 價↑ = 空回補</span>、
+        <span class="mono">OI↓ 價↓ = 多回補</span>。
+      </li>
+      <li>資金費與基差做為順/逆風參考。</li>
+    </ol>
+  </section>
+</main>
+
+<script>
+const $ = s=>document.querySelector(s);
+const fmt=(n, d=2)=>Number(n).toLocaleString('en-US',{maximumFractionDigits:d});
+let timer=null;
+
+async function fetchJson(url){
+  const r = await fetch(url);
+  if(!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+
+async function load(){
+  try{
+    const sym = $('#symbol').value.trim().toUpperCase();
+    $('#refresh').disabled = true;
+
+    // 近 4 小時 5m K 線 (PERPETUAL)
+    const k = await fetchJson(`https://fapi.binance.com/fapi/v1/continuousKlines?pair=${sym}&contractType=PERPETUAL&interval=5m&limit=48`);
+    const closes = k.map(row=>Number(row[4]));
+    const tFirst = k[0][0], tLast = k[k.length-1][0];
+    const p0 = Number(k[0][1]); const p1 = Number(k[k.length-1][4]);
+    const pChange1h = (Number(k[k.length-1][4])-Number(k[k.length-13][4]))/Number(k[k.length-13][4])*100;
+
+    drawSpark(closes);
+
+    // 24h ticker + premiumIndex + funding
+    const [tick, prem, lastFund] = await Promise.all([
+      fetchJson(`https://fapi.binance.com/fapi/v1/ticker/24hr?symbol=${sym}`),
+      fetchJson(`https://fapi.binance.com/fapi/v1/premiumIndex?symbol=${sym}`),
+      fetchJson(`https://fapi.binance.com/fapi/v1/fundingRate?symbol=${sym}&limit=1`)
+    ]);
+
+    const price = Number(prem.markPrice ?? tick.lastPrice);
+    const chg = Number(tick.priceChangePercent);
+    $('#overview').innerHTML = `價格 ${fmt(price)} ｜24h ${chg>=0?'<span class="up">▲':''}${fmt(chg)}%${chg>=0?'</span>':'<span class="down">▼</span>'} ｜ 成交額 $${fmt(tick.quoteVolume,0)}`;
+    $('#funding').innerText = `標記價 ${fmt(prem.markPrice)} ｜基差 ${fmt(prem.lastFundingRate*100,4)} bp ｜上次資金費 ${fmt(lastFund[0]?.fundingRate*100,4)}%`;
+    $('#stamp').innerText = `更新時間：${new Date(tLast).toLocaleString()}（近一小時變化：${fmt(pChange1h,2)}%）`;
+
+    // OI 歷史與 Taker 多空比（近 1h）
+    const [oiHist, tlr] = await Promise.all([
+      fetchJson(`https://fapi.binance.com/futures/data/openInterestHist?symbol=${sym}&period=5m&limit=12`),
+      fetchJson(`https://fapi.binance.com/futures/data/takerlongshortRatio?symbol=${sym}&period=5m&limit=12`)
+    ]);
+
+    const oi0 = Number(oiHist[0].sumOpenInterestValue);
+    const oi1 = Number(oiHist[oiHist.length-1].sumOpenInterestValue);
+    const oiPct = (oi1-oi0)/oi0*100;
+    $('#oi').innerText = `當前 OI $${fmt(oi1,0)} ｜1h 變化 ${fmt(oiPct,2)}%`;
+
+    // 綜合主力訊號
+    const r = tlr.map(x=>Number(x.buySellRatio));
+    const avg = r.reduce((a,b)=>a+b,0)/r.length;
+    let bias = avg>1.05 ? '偏多' : avg<0.95 ? '偏空' : '中性';
+    // OI + 價格四象限
+    let quad='';
+    if(oiPct>0 && pChange1h>0) quad='多單新增（順勢）';
+    else if(oiPct>0 && pChange1h<0) quad='空單新增（逆價上升）';
+    else if(oiPct<0 && pChange1h>0) quad='空單回補（擠壓）';
+    else if(oiPct<0 && pChange1h<0) quad='多單回補（了結）';
+    else quad='變動有限';
+
+    let level = 0;
+    if(bias==='偏多') level+=1;
+    if(bias==='偏空') level-=1;
+    if(quad.includes('多單新增')) level+=2;
+    if(quad.includes('空單新增')) level-=2;
+    if(quad.includes('回補')) level+= (quad.includes('空單回補')?1:-1);
+
+    const label = level>=2 ? '主力多方進場' : level<=-2 ? '主力空方進場' : level>0 ? '多方優勢' : level<0 ? '空方優勢' : '觀望';
+
+    $('#whales').innerHTML = `${label}　<span class="${level>=0?'up':'down'}">Taker 比 ${fmt(avg,2)}</span> ｜ <span class="${oiPct>=0?'up':'down'}">OI ${fmt(oiPct,2)}%</span> ｜ <span class="${pChange1h>=0?'up':'down'}">1h 價 ${fmt(pChange1h,2)}%</span>`;
+    $('#whales-desc').innerText = `${bias}；判讀：${quad}`;
+
+  }catch(e){
+    console.error(e);
+    alert('取得資料時發生錯誤：'+e.message);
+  }finally{
+    $('#refresh').disabled = false;
+  }
+}
+
+function drawSpark(data){
+  const canvas = $('#spark');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.parentElement.clientWidth - 12;
+  const H = canvas.parentElement.clientHeight - 12;
+  canvas.width = W; canvas.height = H;
+  ctx.clearRect(0,0,W,H);
+  const min = Math.min(...data), max = Math.max(...data);
+  const n = data.length;
+  const pad = 8;
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = '#60a5fa';
+  ctx.beginPath();
+  data.forEach((v,i)=>{
+    const x = pad + i*(W-2*pad)/(n-1);
+    const y = H - pad - ( (v-min)/(max-min||1) )*(H-2*pad);
+    i?ctx.lineTo(x,y):ctx.moveTo(x,y);
+  });
+  ctx.stroke();
+}
+
+$('#refresh').addEventListener('click', load);
+$('#auto').addEventListener('change', e=>{
+  if(e.target.checked){
+    timer = setInterval(load, 30000);
+  }else{
+    clearInterval(timer);
+  }
+});
+window.addEventListener('load', load);
+</script>
+</body>
+</html>
