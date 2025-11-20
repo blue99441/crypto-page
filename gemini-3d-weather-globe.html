@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <title>Gemini 3D 氣象地球</title>
+  <style>
+    body { margin: 0; padding: 0; background-color: #000; overflow: hidden; font-family: sans-serif; }
+    
+    /* 讀取動畫 */
+    #loader {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      color: #fff; font-size: 1.2rem; pointer-events: none; z-index: 99;
+      text-shadow: 0 0 10px rgba(0, 255, 255, 0.8);
+      animation: pulse 1.5s infinite alternate;
+    }
+    @keyframes pulse { from { opacity: 0.5; } to { opacity: 1; } }
+
+    /* 城市資訊卡片 (玻璃擬態) */
+    .city-label {
+      position: absolute;
+      background: rgba(20, 30, 40, 0.7);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      padding: 12px 16px;
+      border-radius: 12px;
+      color: #fff;
+      transform: translate(-50%, -140%); /* 讓卡片浮在點的上方 */
+      pointer-events: none; /* 讓滑鼠事件穿透，避免干擾旋轉 */
+      text-align: center;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+      min-width: 100px;
+      transition: opacity 0.3s;
+      display: none; /* 預設隱藏，滑鼠移入才顯示 */
+    }
+    
+    .city-name { font-size: 1rem; font-weight: bold; color: #4db6ac; margin-bottom: 4px; }
+    .city-temp { font-size: 1.8rem; font-weight: 300; }
+    .city-desc { font-size: 0.8rem; color: #bbb; margin-top: 2px; }
+
+    /* 互動點樣式 */
+    .dot {
+      width: 12px; height: 12px;
+      background: #00e5ff;
+      border-radius: 50%;
+      box-shadow: 0 0 15px #00e5ff;
+      cursor: pointer;
+      transition: transform 0.2s;
+    }
+    .dot:hover { transform: scale(1.5); background: #fff; }
+  </style>
+
+  <script src="//unpkg.com/globe.gl"></script>
+</head>
+<body>
+  <div id="loader">正在衛星連線並讀取天氣...</div>
+  <div id="globeViz"></div>
+
+  <script>
+    // 1. 定義城市清單
+    const CITIES = [
+      { name: '台北', lat: 25.0330, lng: 121.5654 },
+      { name: '東京', lat: 35.6762, lng: 139.6503 },
+      { name: '紐約', lat: 40.7128, lng: -74.0060 },
+      { name: '倫敦', lat: 51.5074, lng: -0.1278 },
+      { name: '雪梨', lat: -33.8688, lng: 151.2093 },
+      { name: '巴黎', lat: 48.8566, lng: 2.3522 },
+      { name: '莫斯科', lat: 55.7558, lng: 37.6173 },
+      { name: '新加坡', lat: 1.3521, lng: 103.8198 },
+      { name: '開羅', lat: 30.0444, lng: 31.2357 },
+      { name: '舊金山', lat: 37.7749, lng: -122.4194 }
+    ];
+
+    // 2. 初始化地球
+    const world = Globe()
+      (document.getElementById('globeViz'))
+      .globeImageUrl('//unpkg.com/three-globe/example/img/earth-blue-marble.jpg') // 地球貼圖
+      .bumpImageUrl('//unpkg.com/three-globe/example/img/earth-topology.png')     // 地形凹凸
+      .backgroundImageUrl('//unpkg.com/three-globe/example/img/night-sky.png')    // 星空背景
+      .showAtmosphere(true)
+      .atmosphereColor('#3a228a')
+      .atmosphereAltitude(0.15);
+
+    // 設定自動旋轉
+    world.controls().autoRotate = true;
+    world.controls().autoRotateSpeed = 0.6;
+
+    // 3. 抓取天氣並生成標記
+    async function loadWeatherData() {
+      const weatherData = [];
+
+      // 為了演示簡單性，我們用 Promise.all 平行抓取
+      const requests = CITIES.map(async (city) => {
+        try {
+          // 使用 Open-Meteo 免費 API
+          const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${city.lat}&longitude=${city.lng}&current_weather=true`);
+          const data = await res.json();
+          const temp = data.current_weather.temperature;
+          const code = data.current_weather.weathercode; // 天氣代碼
+          
+          return { ...city, temp, code };
+        } catch (err) {
+          console.error(err);
+          return { ...city, temp: '-', code: 0 };
+        }
+      });
+
+      const results = await Promise.all(requests);
+      document.getElementById('loader').style.display = 'none'; // 隱藏讀取文字
+
+      // 將資料綁定到地球上的 HTML 元素
+      world
+        .htmlElementsData(results)
+        .htmlLat(d => d.lat)
+        .htmlLng(d => d.lng)
+        .htmlElement(d => {
+          const el = document.createElement('div');
+          // 結構：一個點 (dot) + 一個資訊卡 (card)
+          el.innerHTML = `
+            <div class="dot"></div>
+            <div class="city-label">
+              <div class="city-name">${d.name}</div>
+              <div class="city-temp">${d.temp}°C</div>
+              <div class="city-desc">Lat: ${d.lat.toFixed(1)}</div>
+            </div>
+          `;
+
+          const dot = el.querySelector('.dot');
+          const label = el.querySelector('.city-label');
+
+          // 滑鼠互動事件
+          dot.onmouseenter = () => {
+            label.style.display = 'block';
+            world.controls().autoRotate = false; // 滑鼠移上去時停止旋轉
+          };
+          dot.onmouseleave = () => {
+            label.style.display = 'none';
+            world.controls().autoRotate = true; // 移開後繼續旋轉
+          };
+
+          return el;
+        });
+    }
+
+    loadWeatherData();
+  </script>
+</body>
+</html>
