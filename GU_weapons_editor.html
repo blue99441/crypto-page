@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <title>GU_weapons 武器編輯器 v1</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #1e1e1e;
+      color: #f0f0f0;
+    }
+    .container {
+      display: grid;
+      grid-template-columns: 260px 1fr;
+      height: 100vh;
+    }
+    .sidebar {
+      border-right: 1px solid #333;
+      background: #252526;
+      display: flex;
+      flex-direction: column;
+    }
+    .sidebar-header {
+      padding: 10px;
+      border-bottom: 1px solid #333;
+      display: flex;
+      gap: 6px;
+    }
+    button {
+      cursor: pointer;
+      border-radius: 4px;
+      border: none;
+      padding: 6px 10px;
+      font-size: 12px;
+    }
+    button.primary {
+      background: #0e639c;
+      color: white;
+    }
+    button.danger {
+      background: #c43e3e;
+      color: white;
+    }
+    button.secondary {
+      background: #3c3c3c;
+      color: #f0f0f0;
+    }
+    button.small {
+      padding: 3px 6px;
+      font-size: 11px;
+    }
+    .weapon-list {
+      flex: 1;
+      overflow-y: auto;
+    }
+    .weapon-item {
+      padding: 8px 10px;
+      border-bottom: 1px solid #333;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 13px;
+    }
+    .weapon-item.active {
+      background: #094771;
+    }
+    .weapon-id {
+      font-weight: bold;
+    }
+    .weapon-name {
+      font-size: 11px;
+      color: #ccc;
+    }
+    .content {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+    .form-area {
+      padding: 10px 16px;
+      overflow-y: auto;
+      flex: 1;
+    }
+    .section {
+      border: 1px solid #333;
+      border-radius: 6px;
+      padding: 10px 12px;
+      margin-bottom: 10px;
+      background: #1b1b1b;
+    }
+    .section-title {
+      font-size: 13px;
+      font-weight: bold;
+      margin-bottom: 6px;
+      color: #89d185;
+    }
+    .field-row {
+      display: grid;
+      grid-template-columns: 120px 1fr;
+      gap: 6px;
+      align-items: center;
+      margin-bottom: 6px;
+      font-size: 12px;
+    }
+    .field-row label {
+      color: #ccc;
+    }
+    .field-row input[type="text"],
+    .field-row input[type="number"],
+    .field-row select {
+      width: 100%;
+      padding: 4px 6px;
+      border-radius: 3px;
+      border: 1px solid #555;
+      background: #252526;
+      color: #f0f0f0;
+      font-size: 12px;
+    }
+    .field-row input[type="number"]::-webkit-inner-spin-button {
+      margin: 0;
+    }
+    .checkbox-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      margin-bottom: 4px;
+    }
+    textarea {
+      width: 100%;
+      min-height: 60px;
+      resize: vertical;
+      padding: 4px 6px;
+      border-radius: 3px;
+      border: 1px solid #555;
+      background: #252526;
+      color: #f0f0f0;
+      font-size: 12px;
+    }
+    .pill-list {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .pill-item {
+      display: flex;
+      gap: 4px;
+      align-items: center;
+    }
+    .pill-item input {
+      flex: 1;
+    }
+    .footer {
+      border-top: 1px solid #333;
+      padding: 6px 10px;
+      display: flex;
+      gap: 6px;
+      background: #252526;
+    }
+    #yamlOutput {
+      width: 100%;
+      height: 140px;
+      background: #1e1e1e;
+      color: #f0f0f0;
+      border-radius: 4px;
+      border: 1px solid #555;
+      padding: 6px;
+      font-family: "Consolas", "Courier New", monospace;
+      font-size: 12px;
+      resize: vertical;
+    }
+    .hint {
+      font-size: 11px;
+      color: #9cdcfe;
+      margin-top: 4px;
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+  <!-- 左邊：武器列表 -->
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <button class="primary small" id="btnAddWeapon">新增武器</button>
+      <button class="secondary small" id="btnDuplicateWeapon">複製</button>
+      <button class="danger small" id="btnDeleteWeapon">刪除</button>
+    </div>
+    <div class="weapon-list" id="weaponList"></div>
+  </div>
+
+  <!-- 右邊：編輯區 + 匯出 -->
+  <div class="content">
+    <div class="form-area" id="formArea">
+      <!-- 基本資料 -->
+      <div class="section">
+        <div class="section-title">基本資料</div>
+        <div class="field-row">
+          <label for="weaponId">weapon_id</label>
+          <input type="text" id="weaponId" placeholder="例：fire_blade">
+        </div>
+        <div class="checkbox-row">
+          <input type="checkbox" id="enabled">
+          <label for="enabled">enabled（是否啟用）</label>
+        </div>
+      </div>
+
+      <!-- 外觀設定 -->
+      <div class="section">
+        <div class="section-title">外觀設定</div>
+        <div class="field-row">
+          <label for="material">material</label>
+          <select id="material">
+            <option value="DIAMOND_SWORD">DIAMOND_SWORD（建議統一用這個）</option>
+            <option value="IRON_SWORD">IRON_SWORD</option>
+            <option value="WOODEN_SWORD">WOODEN_SWORD</option>
+          </select>
+        </div>
+        <div class="field-row">
+          <label for="displayName">display-name</label>
+          <input type="text" id="displayName" placeholder='例：&c火焰之刃'>
+        </div>
+        <div class="field-row">
+          <label for="cmd">custom-model-data</label>
+          <input type="number" id="cmd" min="0" step="1" placeholder="例：1001">
+        </div>
+        <div class="field-row">
+          <label for="lore">lore（一行一條）</label>
+          <textarea id="lore" placeholder="&7描述一&#10;&7描述二"></textarea>
+        </div>
+        <div class="checkbox-row">
+          <input type="checkbox" id="glow">
+          <label for="glow">glow（顯示附魔光效）</label>
+        </div>
+        <div class="checkbox-row">
+          <input type="checkbox" id="unbreakable">
+          <label for="unbreakable">unbreakable（耐久不會壞）</label>
+        </div>
+      </div>
+
+      <!-- 能力數值 -->
+      <div class="section">
+        <div class="section-title">能力數值</div>
+        <div class="field-row">
+          <label for="baseDamage">base-damage</label>
+          <input type="number" id="baseDamage" step="0.1" placeholder="例：20">
+        </div>
+        <div class="field-row">
+          <label for="attackSpeed">attack-speed</label>
+          <input type="number" id="attackSpeed" step="0.01" placeholder="例：1.1">
+        </div>
+        <div class="field-row">
+          <label for="rarity">rarity</label>
+          <select id="rarity">
+            <option value="">(空)</option>
+            <option value="COMMON">COMMON</option>
+            <option value="RARE">RARE</RARE>
+            <option value="EPIC">EPIC</option>
+            <option value="LEGENDARY">LEGENDARY</option>
+          </select>
+        </div>
+        <div class="field-row">
+          <label for="levelRequired">level-required</label>
+          <input type="number" id="levelRequired" min="0" step="1" placeholder="例：10">
+        </div>
+        <div class="checkbox-row">
+          <input type="checkbox" id="tradable" checked>
+          <label for="tradable">tradable（可交易）</label>
+        </div>
+        <div class="checkbox-row">
+          <input type="checkbox" id="droppable" checked>
+          <label for="droppable">droppable（死亡可掉落）</label>
+        </div>
+      </div>
+
+      <!-- 商店相關 -->
+      <div class="section">
+        <div class="section-title">商店設定</div>
+        <div class="field-row">
+          <label for="buyPrice">buy-price</label>
+          <input type="number" id="buyPrice" min="0" step="1" placeholder="例：500">
+        </div>
+        <div class="field-row">
+          <label for="sellPrice">sell-price</label>
+          <input type="number" id="sellPrice" min="0" step="1" placeholder="例：150">
+        </div>
+      </div>
+
+      <!-- 技能 / 標籤 / extra -->
+      <div class="section">
+        <div class="section-title">skills（只是名稱 給技能插件用）</div>
+        <div class="pill-list" id="skillsList"></div>
+        <button class="secondary small" id="btnAddSkill" type="button">+ 新增 skill</button>
+      </div>
+
+      <div class="section">
+        <div class="section-title">tags（分類 / 屬性標籤）</div>
+        <div class="pill-list" id="tagsList"></div>
+        <button class="secondary small" id="btnAddTag" type="button">+ 新增 tag</button>
+      </div>
+
+      <div class="section">
+        <div class="section-title">extra（其他自訂屬性）</div>
+        <div class="pill-list" id="extraList"></div>
+        <button class="secondary small" id="btnAddExtra" type="button">+ 新增屬性</button>
+        <div class="hint">例如：STR: 5、AGI: 2、HP: 20</div>
+      </div>
+    </div>
+
+    <!-- 匯出區 -->
+    <div class="footer">
+      <button class="primary" id="btnExportYaml">匯出 weapons.yml</button>
+      <textarea id="yamlOutput" placeholder="這裡會產生 YAML，複製到 plugins/GU_weapons/weapons.yml"></textarea>
+    </div>
+  </div>
+</div>
+
+<script>
+  let weapons = [];
+  let currentIndex = -1;
+
+  function createEmptyWeapon() {
+    return {
+      id: "new_weapon",
+      enabled: true,
+      material: "DIAMOND_SWORD",
+      displayName: "&f新武器",
+      customModelData: "",
+      lore: [],
+      glow: false,
+      unbreakable: true,
+      baseDamage: 10,
+      attackSpeed: 1.1,
+      rarity: "",
+      levelRequired: 0,
+      tradable: true,
+      droppable: true,
+      buyPrice: 0,
+      sellPrice: 0,
+      skills: [],
+      tags: [],
+      extra: {}
+    };
+  }
+
+  const weaponListEl = document.getElementById("weaponList");
+
+  function refreshWeaponList() {
+    weaponListEl.innerHTML = "";
+    weapons.forEach((w, idx) => {
+      const div = document.createElement("div");
+      div.className = "weapon-item" + (idx === currentIndex ? " active" : "");
+      div.onclick = () => {
+        saveCurrentFromForm();
+        currentIndex = idx;
+        refreshWeaponList();
+        loadCurrentToForm();
+      };
+
+      const left = document.createElement("div");
+      const idSpan = document.createElement("div");
+      idSpan.className = "weapon-id";
+      idSpan.textContent = w.id || "(未命名)";
+
+      const nameSpan = document.createElement("div");
+      nameSpan.className = "weapon-name";
+      nameSpan.textContent = (w.displayName || "").replace(/&/g, "§");
+
+      left.appendChild(idSpan);
+      left.appendChild(nameSpan);
+      div.appendChild(left);
+
+      const badge = document.createElement("div");
+      badge.style.fontSize = "10px";
+      badge.style.opacity = "0.8";
+      badge.textContent = w.enabled ? "ON" : "OFF";
+      div.appendChild(badge);
+
+      weaponListEl.appendChild(div);
+    });
+  }
+
+  const f = {
+    weaponId: document.getElementById("weaponId"),
+    enabled: document.getElementById("enabled"),
+    material: document.getElementById("material"),
+    displayName: document.getElementById("displayName"),
+    cmd: document.getElementById("cmd"),
+    lore: document.getElementById("lore"),
+    glow: document.getElementById("glow"),
+    unbreakable: document.getElementById("unbreakable"),
+    baseDamage: document.getElementById("baseDamage"),
+    attackSpeed: document.getElementById("attackSpeed"),
+    rarity: document.getElementById("rarity"),
+    levelRequired: document.getElementById("levelRequired"),
+    tradable: document.getElementById("tradable"),
+    droppable: document.getElementById("droppable"),
+    buyPrice: document.getElementById("buyPrice"),
+    sellPrice: document.getElementById("sellPrice"),
+    skillsList: document.getElementById("skillsList"),
+    tagsList: document.getElementById("tagsList"),
+    extraList: document.getElementById("extraList")
+  };
+
+  function loadCurrentToForm() {
+    if (currentIndex < 0 || !weapons[currentIndex]) return;
+    const w = weapons[currentIndex];
+
+    f.weaponId.value = w.id || "";
+    f.enabled.checked = !!w.enabled;
+    f.material.value = w.material || "DIAMOND_SWORD";
+    f.displayName.value = w.displayName || "";
+    f.cmd.value = w.customModelData !== undefined && w.customModelData !== null ? w.customModelData : "";
+    f.lore.value = (w.lore || []).join("\n");
+    f.glow.checked = !!w.glow;
+    f.unbreakable.checked = !!w.unbreakable;
+    f.baseDamage.value = w.baseDamage !== undefined ? w.baseDamage : "";
+    f.attackSpeed.value = w.attackSpeed !== undefined ? w.attackSpeed : "";
+    f.rarity.value = w.rarity || "";
+    f.levelRequired.value = w.levelRequired !== undefined ? w.levelRequired : 0;
+    f.tradable.checked = w.tradable !== false;
+    f.droppable.checked = w.droppable !== false;
+    f.buyPrice.value = w.buyPrice !== undefined ? w.buyPrice : "";
+    f.sellPrice.value = w.sellPrice !== undefined ? w.sellPrice : "";
+
+    f.skillsList.innerHTML = "";
+    (w.skills || []).forEach((s, idx) => {
+      const row = document.createElement("div");
+      row.className = "pill-item";
+      const input = document.createElement("input");
+      input.type = "text";
+      input.value = s;
+      input.oninput = () => {
+        weapons[currentIndex].skills[idx] = input.value;
+      };
+      const btn = document.createElement("button");
+      btn.className = "danger small";
+      btn.textContent = "X";
+      btn.onclick = () => {
+        weapons[currentIndex].skills.splice(idx, 1);
+        loadCurrentToForm();
+      };
+      row.appendChild(input);
+      row.appendChild(btn);
+      f.skillsList.appendChild(row);
+    });
+
+    f.tagsList.innerHTML = "";
+    (w.tags || []).forEach((t, idx) => {
+      const row = document.createElement("div");
+      row.className = "pill-item";
+      const input = document.createElement("input");
+      input.type = "text";
+      input.value = t;
+      input.oninput = () => {
+        weapons[currentIndex].tags[idx] = input.value;
+      };
+      const btn = document.createElement("button");
+      btn.className = "danger small";
+      btn.textContent = "X";
+      btn.onclick = () => {
+        weapons[currentIndex].tags.splice(idx, 1);
+        loadCurrentToForm();
+      };
+      row.appendChild(input);
+      row.appendChild(btn);
+      f.tagsList.appendChild(row);
+    });
+
+    f.extraList.innerHTML = "";
+    const extra = w.extra || {};
+    Object.keys(extra).forEach((key, i) => {
+      const row = document.createElement("div");
+      row.className = "pill-item";
+
+      const keyInput = document.createElement("input");
+      keyInput.type = "text";
+      keyInput.placeholder = "Key";
+      keyInput.value = key;
+
+      const valueInput = document.createElement("input");
+      valueInput.type = "text";
+      valueInput.placeholder = "Value";
+      valueInput.value = extra[key];
+
+      keyInput.oninput = () => {
+        const oldKey = key;
+        const newKey = keyInput.value;
+        if (!weapons[currentIndex].extra) weapons[currentIndex].extra = {};
+        delete weapons[currentIndex].extra[oldKey];
+        if (newKey) weapons[currentIndex].extra[newKey] = valueInput.value;
+        loadCurrentToForm();
+      };
+
+      valueInput.oninput = () => {
+        if (!weapons[currentIndex].extra) weapons[currentIndex].extra = {};
+        weapons[currentIndex].extra[keyInput.value] = valueInput.value;
+      };
+
+      const btn = document.createElement("button");
+      btn.className = "danger small";
+      btn.textContent = "X";
+      btn.onclick = () => {
+        delete weapons[currentIndex].extra[keyInput.value];
+        loadCurrentToForm();
+      };
+
+      row.appendChild(keyInput);
+      row.appendChild(valueInput);
+      row.appendChild(btn);
+      f.extraList.appendChild(row);
+    });
+  }
+
+  function saveCurrentFromForm() {
+    if (currentIndex < 0 || !weapons[currentIndex]) return;
+    const w = weapons[currentIndex];
+
+    w.id = f.weaponId.value.trim() || "new_weapon";
+    w.enabled = f.enabled.checked;
+    w.material = f.material.value || "DIAMOND_SWORD";
+    w.displayName = f.displayName.value.trim();
+    w.customModelData = f.cmd.value.trim() === "" ? "" : Number(f.cmd.value);
+    w.lore = f.lore.value.split("\n").map(s => s.trim()).filter(s => s.length > 0);
+    w.glow = f.glow.checked;
+    w.unbreakable = f.unbreakable.checked;
+    w.baseDamage = f.baseDamage.value !== "" ? Number(f.baseDamage.value) : 0;
+    w.attackSpeed = f.attackSpeed.value !== "" ? Number(f.attackSpeed.value) : null;
+    w.rarity = f.rarity.value || "";
+    w.levelRequired = f.levelRequired.value !== "" ? Number(f.levelRequired.value) : 0;
+    w.tradable = f.tradable.checked;
+    w.droppable = f.droppable.checked;
+    w.buyPrice = f.buyPrice.value !== "" ? Number(f.buyPrice.value) : 0;
+    w.sellPrice = f.sellPrice.value !== "" ? Number(f.sellPrice.value) : 0;
+
+    if (!Array.isArray(w.skills)) w.skills = [];
+    if (!Array.isArray(w.tags)) w.tags = [];
+    if (!w.extra) w.extra = {};
+
+    refreshWeaponList();
+  }
+
+  document.getElementById("btnAddWeapon").onclick = () => {
+    saveCurrentFromForm();
+    weapons.push(createEmptyWeapon());
+    currentIndex = weapons.length - 1;
+    refreshWeaponList();
+    loadCurrentToForm();
+  };
+
+  document.getElementById("btnDuplicateWeapon").onclick = () => {
+    if (currentIndex < 0) return;
+    saveCurrentFromForm();
+    const original = weapons[currentIndex];
+    const copy = JSON.parse(JSON.stringify(original));
+    copy.id = original.id + "_copy";
+    weapons.push(copy);
+    currentIndex = weapons.length - 1;
+    refreshWeaponList();
+    loadCurrentToForm();
+  };
+
+  document.getElementById("btnDeleteWeapon").onclick = () => {
+    if (currentIndex < 0) return;
+    if (!confirm("確定要刪除這把武器嗎？")) return;
+    weapons.splice(currentIndex, 1);
+    if (weapons.length === 0) {
+      currentIndex = -1;
+    } else {
+      currentIndex = Math.max(0, currentIndex - 1);
+    }
+    refreshWeaponList();
+    loadCurrentToForm();
+  };
+
+  document.getElementById("btnAddSkill").onclick = () => {
+    if (currentIndex < 0) return;
+    if (!weapons[currentIndex].skills) weapons[currentIndex].skills = [];
+    weapons[currentIndex].skills.push("");
+    loadCurrentToForm();
+  };
+
+  document.getElementById("btnAddTag").onclick = () => {
+    if (currentIndex < 0) return;
+    if (!weapons[currentIndex].tags) weapons[currentIndex].tags = [];
+    weapons[currentIndex].tags.push("");
+    loadCurrentToForm();
+  };
+
+  document.getElementById("btnAddExtra").onclick = () => {
+    if (currentIndex < 0) return;
+    if (!weapons[currentIndex].extra) weapons[currentIndex].extra = {};
+    weapons[currentIndex].extra["KEY"] = "VALUE";
+    loadCurrentToForm();
+  };
+
+  const yamlOutput = document.getElementById("yamlOutput");
+
+  function yamlEscape(str) {
+    if (str === null || str === undefined) return "";
+    return String(str).replace(/\/g, "\\").replace(/"/g, '\"');
+  }
+
+  function isNumeric(val) {
+    return /^-?\d+(\.\d+)?$/.test(val);
+  }
+
+  function exportYaml() {
+    saveCurrentFromForm();
+    let lines = [];
+
+    weapons.forEach(w => {
+      if (!w.id) return;
+      lines.push(`${w.id}:`);
+      const indent = "  ";
+
+      lines.push(`${indent}enabled: ${w.enabled ? "true" : "false"}`);
+      lines.push(`${indent}material: "${yamlEscape(w.material || "DIAMOND_SWORD")}"`);
+
+      if (w.customModelData !== "" && w.customModelData !== null && w.customModelData !== undefined) {
+        lines.push(`${indent}custom-model-data: ${w.customModelData}`);
+      }
+
+      if (w.displayName && w.displayName.trim().length > 0) {
+        lines.push(`${indent}display-name: "${yamlEscape(w.displayName)}"`);
+      }
+
+      if (w.lore && w.lore.length > 0) {
+        lines.push(`${indent}lore:`);
+        w.lore.forEach(line => {
+          lines.push(`${indent}  - "${yamlEscape(line)}"`);
+        });
+      }
+
+      lines.push(`${indent}glow: ${w.glow ? "true" : "false"}`);
+      lines.push(`${indent}unbreakable: ${w.unbreakable ? "true" : "false"}`);
+
+      lines.push(`${indent}base-damage: ${w.baseDamage !== undefined ? w.baseDamage : 0}`);
+      if (w.attackSpeed !== null && w.attackSpeed !== undefined && w.attackSpeed !== "") {
+        lines.push(`${indent}attack-speed: ${w.attackSpeed}`);
+      }
+
+      if (w.rarity && w.rarity.length > 0) {
+        lines.push(`${indent}rarity: "${yamlEscape(w.rarity)}"`);
+      }
+
+      if (w.levelRequired !== undefined && w.levelRequired !== null) {
+        lines.push(`${indent}level-required: ${w.levelRequired}`);
+      }
+
+      lines.push(`${indent}tradable: ${w.tradable ? "true" : "false"}`);
+      lines.push(`${indent}droppable: ${w.droppable ? "true" : "false"}`);
+
+      if (w.buyPrice !== undefined) {
+        lines.push(`${indent}buy-price: ${w.buyPrice}`);
+      }
+      if (w.sellPrice !== undefined) {
+        lines.push(`${indent}sell-price: ${w.sellPrice}`);
+      }
+
+      if (w.skills && w.skills.length > 0) {
+        const cleanSkills = w.skills.map(s => s.trim()).filter(s => s.length > 0);
+        if (cleanSkills.length > 0) {
+          lines.push(`${indent}skills:`);
+          cleanSkills.forEach(s => {
+            lines.push(`${indent}  - "${yamlEscape(s)}"`);
+          });
+        }
+      }
+
+      if (w.tags && w.tags.length > 0) {
+        const cleanTags = w.tags.map(t => t.trim()).filter(t => t.length > 0);
+        if (cleanTags.length > 0) {
+          lines.push(`${indent}tags:`);
+          cleanTags.forEach(t => {
+            lines.push(`${indent}  - "${yamlEscape(t)}"`);
+          });
+        }
+      }
+
+      if (w.extra && Object.keys(w.extra).length > 0) {
+        lines.push(`${indent}extra:`);
+        Object.entries(w.extra).forEach(([k, v]) => {
+          const valStr = String(v);
+          if (isNumeric(valStr)) {
+            lines.push(`${indent}  ${k}: ${valStr}`);
+          } else {
+            lines.push(`${indent}  ${k}: "${yamlEscape(valStr)}"`);
+          }
+        });
+      }
+
+      lines.push("");
+    });
+
+    yamlOutput.value = lines.join("\n");
+  }
+
+  document.getElementById("btnExportYaml").onclick = exportYaml;
+
+  weapons.push({
+    id: "fire_blade",
+    enabled: true,
+    material: "DIAMOND_SWORD",
+    displayName: "&c火焰之刃",
+    customModelData: 1001,
+    lore: ["&7灼熱的火焰在刀刃上燃燒", "&c攻擊力: &f20"],
+    glow: true,
+    unbreakable: true,
+    baseDamage: 20,
+    attackSpeed: 1.1,
+    rarity: "EPIC",
+    levelRequired: 10,
+    tradable: true,
+    droppable: true,
+    buyPrice: 500,
+    sellPrice: 150,
+    skills: ["fire_slash", "dash"],
+    tags: ["fire", "katana"],
+    extra: { STR: 5, AGI: 2 }
+  });
+  currentIndex = 0;
+  refreshWeaponList();
+  loadCurrentToForm();
+</script>
+</body>
+</html>
