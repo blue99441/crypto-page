@@ -1,0 +1,878 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>ABC 複利績效帳本</title>
+  <style>
+    :root{
+      --bg:#050607;
+      --panel:#0d0f11;
+      --panel2:#14171a;
+      --panel3:#202326;
+      --line:#262b30;
+      --text:#d9dde2;
+      --muted:#8b929b;
+      --blue:#56bfff;
+      --red:#ff5c6c;
+      --green:#2ee59d;
+      --gold:#d8b764;
+      --cell:#101214;
+      --cell2:#17191b;
+      --shadow:0 18px 45px rgba(0,0,0,.45);
+    }
+    *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+    body{
+      margin:0;
+      background:#000;
+      color:var(--text);
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans TC","Microsoft JhengHei",Arial,sans-serif;
+      min-height:100svh;
+      display:flex;
+      justify-content:center;
+    }
+    .phone{
+      width:min(100vw,460px);
+      min-height:100svh;
+      background:var(--bg);
+      position:relative;
+      overflow:hidden;
+      box-shadow:var(--shadow);
+      border-left:1px solid #111;
+      border-right:1px solid #111;
+      padding-bottom:96px;
+    }
+    header{
+      height:78px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      padding:18px 20px 12px;
+      border-top:1px solid #555;
+      border-bottom:1px solid #2a2d31;
+      background:linear-gradient(180deg,#111416,#0c0e10);
+      position:sticky;
+      top:0;
+      z-index:9;
+    }
+    .asset{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      font-size:18px;
+      font-weight:700;
+      letter-spacing:.5px;
+      color:var(--blue);
+    }
+    .asset .money{
+      color:#d8dbe0;
+      font-weight:500;
+      margin-left:2px;
+    }
+    .icon{
+      width:24px;height:24px;display:inline-grid;place-items:center;color:var(--blue);
+      font-size:22px;line-height:1;
+    }
+    .mini-btn{
+      border:0;
+      background:transparent;
+      color:var(--blue);
+      font-size:24px;
+      padding:8px;
+      cursor:pointer;
+    }
+    .monthbar{
+      display:grid;
+      grid-template-columns:48px 1fr 48px;
+      align-items:center;
+      text-align:center;
+      padding:12px 8px 6px;
+      background:#050607;
+    }
+    .monthbar button{
+      color:var(--blue);
+      font-size:32px;
+      border:0;background:transparent;line-height:1;cursor:pointer;
+      padding:4px 0;
+    }
+    .month-title{
+      font-size:22px;
+      letter-spacing:2px;
+      color:#d8dbe0;
+      font-weight:500;
+    }
+    .week-head{
+      display:grid;
+      grid-template-columns:repeat(7,1fr) 68px;
+      padding:0 0;
+      border-bottom:1px solid #111;
+      color:#b8bdc5;
+      font-size:13px;
+      text-align:center;
+    }
+    .week-head div{
+      padding:6px 0 8px;
+    }
+    .calendar{
+      display:grid;
+      grid-template-columns:repeat(7,1fr) 68px;
+      grid-auto-rows:74px;
+      border-top:1px solid #070707;
+      border-left:1px solid #050505;
+      background:#050505;
+    }
+    .day,.week-total{
+      position:relative;
+      background:var(--cell);
+      border-right:1px solid #060606;
+      border-bottom:1px solid #060606;
+      padding:6px 5px;
+      min-width:0;
+    }
+    .day.empty{background:#030303}
+    .day.today{background:#202123}
+    .day.selected{outline:2px solid rgba(86,191,255,.8);outline-offset:-2px;background:#15191c}
+    .num{
+      font-size:15px;
+      color:#aeb4bb;
+      line-height:1;
+    }
+    .today .num{
+      background:var(--red);
+      color:#030303;
+      display:inline-grid;
+      place-items:center;
+      min-width:22px;height:22px;
+      border-radius:3px;
+      font-weight:800;
+    }
+    .pnl{
+      position:absolute;
+      bottom:8px;
+      left:5px;
+      right:5px;
+      display:flex;
+      flex-direction:column;
+      gap:2px;
+      font-size:11px;
+      line-height:1.12;
+      white-space:nowrap;
+      overflow:hidden;
+    }
+    .pnl span{overflow:hidden;text-overflow:ellipsis}
+    .pos{color:var(--green)}
+    .neg{color:var(--red)}
+    .zero{color:#61676e}
+    .week-total{
+      background:#161819;
+      color:#9da4ac;
+      font-size:15px;
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+      justify-content:flex-start;
+    }
+    .week-total b{font-size:14px;font-weight:500;color:#9da4ac}
+    .week-total small{font-size:12px;line-height:1.2}
+    .summary{
+      margin-top:8px;
+      border-top:1px solid #16191c;
+      border-bottom:1px solid #22272c;
+      background:#0b0d0f;
+    }
+    .row{
+      display:grid;
+      grid-template-columns:48px 1fr auto;
+      align-items:center;
+      min-height:40px;
+      padding:0 18px 0 20px;
+      border-bottom:1px solid #1b1f23;
+      font-size:18px;
+      background:#0d0f11;
+    }
+    .row:nth-child(even){background:#242628}
+    .row:last-child{border-bottom:0}
+    .row .label{color:#c8cdd3}
+    .row .value{color:#d8dbe0}
+    .row .row-icon{color:var(--blue);font-size:23px;text-align:left}
+    .input-panel{
+      margin:12px 12px 0;
+      background:linear-gradient(180deg,#15181b,#0d0f11);
+      border:1px solid #262c31;
+      border-radius:18px;
+      box-shadow:var(--shadow);
+      overflow:hidden;
+    }
+    .panel-head{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      padding:14px 14px 10px;
+      border-bottom:1px solid #252a2f;
+    }
+    .panel-title{
+      font-weight:800;
+      color:#f2f4f6;
+    }
+    .panel-date{
+      color:var(--blue);
+      font-size:14px;
+    }
+    .inputs{
+      display:grid;
+      grid-template-columns:repeat(3,1fr);
+      gap:8px;
+      padding:12px;
+    }
+    .field{
+      background:#090b0d;
+      border:1px solid #252a30;
+      border-radius:14px;
+      padding:10px 9px;
+    }
+    .field label{
+      display:block;
+      color:var(--muted);
+      font-size:12px;
+      margin-bottom:6px;
+    }
+    .field input{
+      width:100%;
+      background:transparent;
+      border:0;
+      outline:0;
+      color:#f6f7f8;
+      font-size:18px;
+      font-weight:700;
+      font-family:inherit;
+    }
+    .hint{
+      padding:0 13px 12px;
+      font-size:12px;
+      color:#7e858e;
+      line-height:1.45;
+    }
+    .tabs{
+      display:flex;
+      gap:8px;
+      padding:0 12px 12px;
+    }
+    .pill{
+      flex:1;
+      background:#090b0d;
+      border:1px solid #2b3036;
+      color:#afb6be;
+      border-radius:999px;
+      padding:9px 6px;
+      font-size:13px;
+      cursor:pointer;
+    }
+    .pill.active{
+      color:#111;
+      background:linear-gradient(135deg,var(--gold),#f4da8a);
+      border-color:#f4da8a;
+      font-weight:800;
+    }
+    section.page{display:none}
+    section.page.active{display:block}
+    .timeline{
+      margin:12px;
+      border-radius:18px;
+      overflow:hidden;
+      border:1px solid #242a30;
+      background:#0d0f11;
+    }
+    .trade{
+      display:grid;
+      grid-template-columns:74px 1fr auto;
+      gap:10px;
+      padding:12px;
+      border-bottom:1px solid #1d2227;
+      align-items:center;
+    }
+    .trade:last-child{border-bottom:0}
+    .trade-date{color:#8e96a0;font-size:13px}
+    .trade-main{font-size:14px;color:#d5d9de}
+    .trade-value{font-weight:800}
+    .chart-wrap{
+      margin:12px;
+      padding:14px;
+      border-radius:18px;
+      border:1px solid #252b31;
+      background:linear-gradient(180deg,#15181b,#0b0d0f);
+      min-height:260px;
+    }
+    canvas{width:100%;height:240px;display:block}
+    .cards{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:10px;
+      padding:12px;
+    }
+    .card{
+      background:linear-gradient(180deg,#15181b,#0d0f11);
+      border:1px solid #252b31;
+      border-radius:18px;
+      padding:14px;
+      min-height:92px;
+    }
+    .card .k{color:#8e96a0;font-size:13px;margin-bottom:10px}
+    .card .v{font-size:22px;font-weight:900;color:#f4f6f7}
+    .card .sub{color:#7c838c;font-size:12px;margin-top:5px}
+    .settings{
+      margin:12px;
+      border-radius:18px;
+      border:1px solid #252b31;
+      background:#0d0f11;
+      overflow:hidden;
+    }
+    .set-row{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      padding:14px;
+      border-bottom:1px solid #1d2227;
+    }
+    .set-row:last-child{border-bottom:0}
+    .set-row label{color:#c9ced4}
+    .set-row input{
+      background:#08090a;
+      border:1px solid #2a3036;
+      color:#f4f6f8;
+      border-radius:12px;
+      padding:10px;
+      width:130px;
+      font-size:16px;
+    }
+    .set-row button,.action-btn{
+      border:1px solid #38414a;
+      background:#15191d;
+      color:#d6dce2;
+      border-radius:12px;
+      padding:10px 12px;
+      cursor:pointer;
+      font-weight:700;
+    }
+    .danger{color:#ff8c96!important;border-color:#743039!important}
+    .bottom{
+      position:fixed;
+      left:50%;
+      transform:translateX(-50%);
+      bottom:0;
+      width:min(100vw,460px);
+      height:82px;
+      background:#0e1012;
+      border-top:1px solid #272c31;
+      display:grid;
+      grid-template-columns:repeat(5,1fr);
+      z-index:20;
+      padding-bottom:env(safe-area-inset-bottom);
+    }
+    .nav{
+      border:0;background:transparent;color:#90969e;
+      display:flex;flex-direction:column;align-items:center;justify-content:center;
+      gap:4px;font-size:13px;cursor:pointer;position:relative;
+      font-family:inherit;
+    }
+    .nav .nicon{font-size:25px;line-height:1}
+    .nav.active{color:var(--blue)}
+    .dot{
+      position:absolute;right:22px;top:16px;width:9px;height:9px;background:#ff4b43;border-radius:50%;
+    }
+    .modal-backdrop{
+      display:none;
+      position:fixed;inset:0;background:rgba(0,0,0,.68);
+      z-index:60;align-items:center;justify-content:center;padding:18px;
+    }
+    .modal{
+      width:min(420px,100%);
+      background:#111417;
+      border:1px solid #30363d;
+      border-radius:22px;
+      overflow:hidden;
+      box-shadow:0 24px 70px rgba(0,0,0,.7);
+    }
+    .modal h3{margin:0;padding:16px;border-bottom:1px solid #252b31}
+    .modal-body{padding:14px;color:#c7cdd4;line-height:1.65}
+    .modal-actions{display:flex;gap:8px;padding:0 14px 14px}
+    .modal-actions button{flex:1}
+    @media (min-width:700px){
+      body{align-items:flex-start;background:radial-gradient(circle at top,#1a1d20,#000 48%)}
+      .phone{margin:24px 0;border-radius:32px;min-height:calc(100svh - 48px);max-height:960px}
+      .bottom{bottom:24px;border-bottom-left-radius:32px;border-bottom-right-radius:32px}
+    }
+  </style>
+</head>
+<body>
+  <main class="phone">
+    <header>
+      <div class="asset">
+        <span class="icon">▣</span>
+        <span>總資產</span>
+        <span class="money" id="totalAsset">$1,000</span>
+        <button class="mini-btn" id="toggleAsset" title="隱藏資產">◉</button>
+      </div>
+      <button class="mini-btn" id="openHelp">⌄</button>
+    </header>
+
+    <section id="home" class="page active">
+      <div class="monthbar">
+        <button id="prevMonth">‹</button>
+        <div class="month-title" id="monthTitle">2026/05</div>
+        <button id="nextMonth">›</button>
+      </div>
+
+      <div class="week-head">
+        <div>星期日</div><div>星期一</div><div>星期二</div><div>星期三</div><div>星期四</div><div>星期五</div><div>星期六</div><div>每週合計</div>
+      </div>
+      <div class="calendar" id="calendar"></div>
+
+      <div class="summary">
+        <div class="row"><div class="row-icon">▣</div><div class="label" id="dailyLabel">日間績效</div><div class="value" id="dailyPerf">0.00%</div></div>
+        <div class="row"><div class="row-icon">⚑</div><div class="label">週次績效</div><div class="value" id="weeklyPerf">--%</div></div>
+        <div class="row"><div class="row-icon">⚐</div><div class="label">月間績效</div><div class="value" id="monthlyPerf">0%</div></div>
+        <div class="row"><div class="row-icon">⚐</div><div class="label">年間績效</div><div class="value" id="yearlyPerf">0%</div></div>
+        <div class="row"><div class="row-icon">▣</div><div class="label">週間損益</div><div class="value" id="weeklyPnl">$0</div></div>
+        <div class="row"><div class="row-icon">▣</div><div class="label">月間損益</div><div class="value" id="monthlyPnl">$0</div></div>
+        <div class="row"><div class="row-icon">▭</div><div class="label">年間損益（月底）</div><div class="value" id="yearlyPnl">$0</div></div>
+      </div>
+
+      <div class="input-panel">
+        <div class="panel-head">
+          <div class="panel-title">每日只填 A / B / C 盈利 U</div>
+          <div class="panel-date" id="selectedDateText">--</div>
+        </div>
+        <div class="tabs">
+          <button class="pill active" data-quick="all">總覽</button>
+          <button class="pill" data-quick="clear">清空今日</button>
+          <button class="pill" data-quick="today">跳回今天</button>
+        </div>
+        <div class="inputs">
+          <div class="field"><label>A 帳號 盈利 U</label><input id="inputA" type="number" inputmode="decimal" step="0.01" placeholder="0"></div>
+          <div class="field"><label>B 帳號 盈利 U</label><input id="inputB" type="number" inputmode="decimal" step="0.01" placeholder="0"></div>
+          <div class="field"><label>C 帳號 盈利 U</label><input id="inputC" type="number" inputmode="decimal" step="0.01" placeholder="0"></div>
+        </div>
+        <div class="hint">輸入正數代表盈利，負數代表虧損。資料會存在這台手機/電腦的瀏覽器 localStorage。換裝置就不會跟著跑，這點很現實，別跟瀏覽器談複利感情。</div>
+      </div>
+    </section>
+
+    <section id="timeline" class="page">
+      <div class="monthbar"><button data-jump="prev">‹</button><div class="month-title">時間軸</div><button data-jump="next">›</button></div>
+      <div class="timeline" id="timelineList"></div>
+    </section>
+
+    <section id="chart" class="page">
+      <div class="monthbar"><button data-jump="prev">‹</button><div class="month-title">績效圖</div><button data-jump="next">›</button></div>
+      <div class="chart-wrap">
+        <canvas id="equityChart" width="800" height="430"></canvas>
+      </div>
+      <div class="cards">
+        <div class="card"><div class="k">目前淨值</div><div class="v" id="cardEquity">$1,000</div><div class="sub">起始資金自設定調整</div></div>
+        <div class="card"><div class="k">累積損益</div><div class="v" id="cardPnl">$0</div><div class="sub">A+B+C 合計</div></div>
+      </div>
+    </section>
+
+    <section id="analysis" class="page">
+      <div class="monthbar"><button data-jump="prev">‹</button><div class="month-title">分析</div><button data-jump="next">›</button></div>
+      <div class="cards">
+        <div class="card"><div class="k">報酬率</div><div class="v" id="returnRate">0%</div><div class="sub">總資產 / 起始資金</div></div>
+        <div class="card"><div class="k">勝率</div><div class="v" id="winRate">0%</div><div class="sub">盈利日 / 有交易日</div></div>
+        <div class="card"><div class="k">最大回撤</div><div class="v" id="maxDD">0%</div><div class="sub">從高點回落幅度</div></div>
+        <div class="card"><div class="k">連勝 / 連敗</div><div class="v" id="streak">0 / 0</div><div class="sub">日損益連續統計</div></div>
+        <div class="card"><div class="k">A 帳號</div><div class="v" id="statA">$0</div><div class="sub">累積盈利 U</div></div>
+        <div class="card"><div class="k">B 帳號</div><div class="v" id="statB">$0</div><div class="sub">累積盈利 U</div></div>
+        <div class="card"><div class="k">C 帳號</div><div class="v" id="statC">$0</div><div class="sub">累積盈利 U</div></div>
+        <div class="card"><div class="k">交易天數</div><div class="v" id="tradeDays">0</div><div class="sub">有填盈虧才計算</div></div>
+      </div>
+    </section>
+
+    <section id="settings" class="page">
+      <div class="monthbar"><button data-jump="prev">‹</button><div class="month-title">設定</div><button data-jump="next">›</button></div>
+      <div class="settings">
+        <div class="set-row"><label>起始資金 U</label><input id="startCapital" type="number" inputmode="decimal" step="1"></div>
+        <div class="set-row"><label>匯出資料</label><button id="exportCsv">下載 CSV</button></div>
+        <div class="set-row"><label>匯出備份</label><button id="exportJson">下載 JSON</button></div>
+        <div class="set-row"><label>匯入備份</label><input id="importJson" type="file" accept="application/json" style="width:160px;padding:7px;font-size:12px"></div>
+        <div class="set-row"><label>重設全部資料</label><button class="danger" id="resetAll">全部清掉</button></div>
+      </div>
+    </section>
+
+    <nav class="bottom">
+      <button class="nav active" data-page="home"><span class="nicon">▣</span><span>首頁</span></button>
+      <button class="nav" data-page="timeline"><span class="nicon">☰</span><span>時間軸</span></button>
+      <button class="nav" data-page="chart"><span class="nicon">⌁</span><span>圖表</span></button>
+      <button class="nav" data-page="analysis"><span class="nicon">▥</span><span>分析</span></button>
+      <button class="nav" data-page="settings"><span class="nicon">⚙</span><span>設定</span><span class="dot"></span></button>
+    </nav>
+  </main>
+
+  <div class="modal-backdrop" id="helpModal">
+    <div class="modal">
+      <h3>ABC 複利績效帳本</h3>
+      <div class="modal-body">
+        這版做成手機 App 感的網頁。每天只要點日期，填 A / B / C 三個帳號的盈利 U，系統會自動算總資產、日績效、週/月/年績效、勝率與最大回撤。<br><br>
+        資料存在瀏覽器本機。建議偶爾到設定匯出 JSON 備份，不然清快取會直接人生重來。
+      </div>
+      <div class="modal-actions">
+        <button class="action-btn" id="closeHelp">知道了</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const KEY = 'abc_compound_mobile_web_v2';
+    const fmtMoney = n => {
+      const sign = n < 0 ? '-' : '';
+      return sign + '$' + Math.abs(n).toLocaleString(undefined,{maximumFractionDigits:2});
+    };
+    const pct = n => {
+      if(!Number.isFinite(n)) return '--%';
+      return (n >= 0 ? '' : '') + n.toFixed(2) + '%';
+    };
+    const iso = d => {
+      const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), day=String(d.getDate()).padStart(2,'0');
+      return `${y}-${m}-${day}`;
+    };
+    const parseLocal = s => {
+      const [y,m,d] = s.split('-').map(Number);
+      return new Date(y,m-1,d);
+    };
+    const monthKey = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    const today = new Date();
+    let state = load();
+    let viewDate = new Date(today.getFullYear(), today.getMonth(), 1);
+    let selected = iso(today);
+    let hideAsset = false;
+
+    function defaultState(){
+      return {startCapital:1000, records:{}};
+    }
+    function load(){
+      try{
+        return JSON.parse(localStorage.getItem(KEY)) || defaultState();
+      }catch(e){return defaultState();}
+    }
+    function save(){
+      localStorage.setItem(KEY, JSON.stringify(state));
+    }
+    function getRec(date){
+      return state.records[date] || {A:'',B:'',C:''};
+    }
+    function setRec(date, rec){
+      const clean = {A:rec.A||'', B:rec.B||'', C:rec.C||''};
+      const total = Number(clean.A||0)+Number(clean.B||0)+Number(clean.C||0);
+      if(clean.A==='' && clean.B==='' && clean.C==='') delete state.records[date];
+      else state.records[date]=clean;
+      save(); render();
+    }
+    function dayPnl(date){
+      const r=getRec(date);
+      return Number(r.A||0)+Number(r.B||0)+Number(r.C||0);
+    }
+    function hasTrade(date){
+      const r=getRec(date);
+      return r.A!=='' || r.B!=='' || r.C!=='';
+    }
+    function allDatesSorted(){
+      return Object.keys(state.records).sort();
+    }
+    function totalPnlUntil(date){
+      return allDatesSorted().filter(k=>k<=date).reduce((s,k)=>s+dayPnl(k),0);
+    }
+    function totalPnlAll(){
+      return allDatesSorted().reduce((s,k)=>s+dayPnl(k),0);
+    }
+    function equityAt(date){
+      return Number(state.startCapital||1000)+totalPnlUntil(date);
+    }
+    function periodPnl(start, end){
+      return allDatesSorted().filter(k=>k>=start && k<=end).reduce((s,k)=>s+dayPnl(k),0);
+    }
+    function getWeekIndex(dateObj){
+      const first = new Date(dateObj.getFullYear(), dateObj.getMonth(), 1);
+      return Math.floor((first.getDay() + dateObj.getDate() - 1) / 7) + 1;
+    }
+    function weekRangeFor(dateObj){
+      const start = new Date(dateObj);
+      start.setDate(dateObj.getDate() - dateObj.getDay());
+      const end = new Date(start);
+      end.setDate(start.getDate()+6);
+      return [iso(start), iso(end)];
+    }
+    function monthRange(dateObj){
+      const y=dateObj.getFullYear(), m=dateObj.getMonth();
+      return [iso(new Date(y,m,1)), iso(new Date(y,m+1,0))];
+    }
+    function yearRange(dateObj){
+      const y=dateObj.getFullYear();
+      return [`${y}-01-01`, `${y}-12-31`];
+    }
+    function renderCalendar(){
+      const cal = document.getElementById('calendar');
+      cal.innerHTML='';
+      const y=viewDate.getFullYear(), m=viewDate.getMonth();
+      document.getElementById('monthTitle').textContent = `${y}/${String(m+1).padStart(2,'0')}`;
+      const first = new Date(y,m,1);
+      const days = new Date(y,m+1,0).getDate();
+      const startDay = first.getDay();
+      const rows = Math.ceil((startDay + days)/7);
+      let day=1;
+      for(let r=0;r<rows;r++){
+        for(let c=0;c<7;c++){
+          const idx = r*7+c;
+          const cell=document.createElement('div');
+          cell.className='day';
+          if(idx < startDay || day > days){
+            cell.classList.add('empty');
+          }else{
+            const d=new Date(y,m,day);
+            const ds=iso(d);
+            if(ds===iso(today)) cell.classList.add('today');
+            if(ds===selected) cell.classList.add('selected');
+            cell.dataset.date=ds;
+            const p=dayPnl(ds);
+            const r=getRec(ds);
+            cell.innerHTML = `<div class="num">${day}</div>`;
+            if(hasTrade(ds)){
+              const klass = p>0?'pos':p<0?'neg':'zero';
+              cell.innerHTML += `<div class="pnl">
+                <span class="${Number(r.A||0)>=0?'pos':'neg'}">A ${fmtMoney(Number(r.A||0))}</span>
+                <span class="${Number(r.B||0)>=0?'pos':'neg'}">B ${fmtMoney(Number(r.B||0))}</span>
+                <span class="${Number(r.C||0)>=0?'pos':'neg'}">C ${fmtMoney(Number(r.C||0))}</span>
+                <span class="${klass}">合 ${fmtMoney(p)}</span>
+              </div>`;
+            }
+            cell.addEventListener('click',()=>{selected=ds; fillInputs(); render();});
+            day++;
+          }
+          cal.appendChild(cell);
+        }
+        const wt=document.createElement('div');
+        wt.className='week-total';
+        const rowStart = new Date(y,m,1 + r*7 - startDay);
+        const rowEnd = new Date(rowStart); rowEnd.setDate(rowStart.getDate()+6);
+        const pnl = periodPnl(iso(rowStart), iso(rowEnd));
+        const baseBefore = Math.max(1, equityAt(iso(new Date(rowStart.getFullYear(),rowStart.getMonth(),rowStart.getDate()-1))));
+        const perf = pnl / baseBefore * 100;
+        wt.innerHTML = `<b>W${r+1}</b><small class="${pnl>0?'pos':pnl<0?'neg':'zero'}">${fmtMoney(pnl)}</small><small>${pnl===0?'--':pct(perf)}</small>`;
+        cal.appendChild(wt);
+      }
+      const needRows = 6;
+      for(let rr=rows; rr<needRows; rr++){
+        for(let c=0;c<7;c++){
+          const e=document.createElement('div'); e.className='day empty'; cal.appendChild(e);
+        }
+        const wt=document.createElement('div'); wt.className='week-total'; wt.innerHTML=`<b>W${rr+1}</b>`; cal.appendChild(wt);
+      }
+    }
+    function fillInputs(){
+      const r=getRec(selected);
+      document.getElementById('inputA').value=r.A;
+      document.getElementById('inputB').value=r.B;
+      document.getElementById('inputC').value=r.C;
+      document.getElementById('selectedDateText').textContent = selected;
+      document.getElementById('dailyLabel').textContent = `日間績效 (${selected.slice(5).replace('-','/')})`;
+    }
+    function renderSummary(){
+      const start=Number(state.startCapital||1000);
+      const totalPnl=totalPnlAll();
+      const asset=start+totalPnl;
+      document.getElementById('totalAsset').textContent = hideAsset ? '••••••' : fmtMoney(asset);
+      const pToday=dayPnl(selected);
+      const beforeSelected = equityAt(iso(new Date(parseLocal(selected).getFullYear(),parseLocal(selected).getMonth(),parseLocal(selected).getDate()-1)));
+      document.getElementById('dailyPerf').textContent = hasTrade(selected) ? pct(pToday / Math.max(1,beforeSelected) * 100) : '0.00%';
+      const sd=parseLocal(selected);
+      const [ws,we]=weekRangeFor(sd), [ms,me]=monthRange(sd), [ys,ye]=yearRange(sd);
+      const wp=periodPnl(ws,we), mp=periodPnl(ms,me), yp=periodPnl(ys,ye);
+      document.getElementById('weeklyPnl').textContent=fmtMoney(wp);
+      document.getElementById('monthlyPnl').textContent=fmtMoney(mp);
+      document.getElementById('yearlyPnl').textContent=fmtMoney(yp);
+      const wb = equityAt(iso(new Date(parseLocal(ws).getFullYear(),parseLocal(ws).getMonth(),parseLocal(ws).getDate()-1)));
+      const mb = equityAt(iso(new Date(parseLocal(ms).getFullYear(),parseLocal(ms).getMonth(),parseLocal(ms).getDate()-1)));
+      const yb = equityAt(iso(new Date(parseLocal(ys).getFullYear(),parseLocal(ys).getMonth(),parseLocal(ys).getDate()-1)));
+      document.getElementById('weeklyPerf').textContent = wp===0?'--%':pct(wp/Math.max(1,wb)*100);
+      document.getElementById('monthlyPerf').textContent = pct(mp/Math.max(1,mb)*100);
+      document.getElementById('yearlyPerf').textContent = pct(yp/Math.max(1,yb)*100);
+      const ret = (asset-start)/Math.max(1,start)*100;
+      document.getElementById('returnRate').textContent=pct(ret);
+      document.getElementById('cardEquity').textContent=fmtMoney(asset);
+      document.getElementById('cardPnl').textContent=fmtMoney(totalPnl);
+      document.getElementById('cardPnl').className = 'v ' + (totalPnl>=0?'pos':'neg');
+      document.getElementById('startCapital').value=state.startCapital;
+      const acc={A:0,B:0,C:0};
+      let wins=0, trades=0, maxWin=0, maxLoss=0, curWin=0, curLoss=0;
+      let peak=start, maxDD=0, eq=start;
+      allDatesSorted().forEach(k=>{
+        const r=getRec(k);
+        acc.A+=Number(r.A||0); acc.B+=Number(r.B||0); acc.C+=Number(r.C||0);
+        const p=dayPnl(k);
+        if(hasTrade(k)){
+          trades++;
+          if(p>0){wins++; curWin++; curLoss=0;}
+          else if(p<0){curLoss++; curWin=0;}
+          else {curWin=0; curLoss=0;}
+          maxWin=Math.max(maxWin,curWin); maxLoss=Math.max(maxLoss,curLoss);
+        }
+        eq += p; peak=Math.max(peak,eq);
+        const dd = peak>0 ? (peak-eq)/peak*100 : 0;
+        maxDD=Math.max(maxDD,dd);
+      });
+      document.getElementById('winRate').textContent = trades ? pct(wins/trades*100) : '0%';
+      document.getElementById('maxDD').textContent = pct(maxDD);
+      document.getElementById('streak').textContent = `${maxWin} / ${maxLoss}`;
+      document.getElementById('statA').textContent=fmtMoney(acc.A);
+      document.getElementById('statB').textContent=fmtMoney(acc.B);
+      document.getElementById('statC').textContent=fmtMoney(acc.C);
+      document.getElementById('tradeDays').textContent=trades;
+    }
+    function renderTimeline(){
+      const box=document.getElementById('timelineList');
+      const dates=allDatesSorted().reverse();
+      if(!dates.length){box.innerHTML='<div class="trade"><div></div><div class="trade-main">目前沒有紀錄。先去首頁填一筆，不然績效圖只能躺平。</div><div></div></div>';return;}
+      box.innerHTML=dates.map(k=>{
+        const r=getRec(k), p=dayPnl(k);
+        return `<div class="trade">
+          <div class="trade-date">${k.slice(5)}</div>
+          <div class="trade-main">A ${fmtMoney(Number(r.A||0))}　B ${fmtMoney(Number(r.B||0))}　C ${fmtMoney(Number(r.C||0))}</div>
+          <div class="trade-value ${p>=0?'pos':'neg'}">${fmtMoney(p)}</div>
+        </div>`;
+      }).join('');
+    }
+    function renderChart(){
+      const canvas=document.getElementById('equityChart');
+      const ctx=canvas.getContext('2d');
+      const w=canvas.width,h=canvas.height;
+      ctx.clearRect(0,0,w,h);
+      ctx.fillStyle='#0b0d0f'; ctx.fillRect(0,0,w,h);
+      const pad={l:58,r:18,t:20,b:44};
+      ctx.strokeStyle='#262c32'; ctx.lineWidth=1;
+      ctx.font='22px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif';
+      ctx.fillStyle='#8f98a2';
+      const dates=allDatesSorted();
+      let points=[];
+      let eq=Number(state.startCapital||1000);
+      points.push({date:'Start',eq});
+      dates.forEach(k=>{eq+=dayPnl(k); points.push({date:k,eq});});
+      if(points.length<2){
+        points.push({date:iso(today),eq});
+      }
+      const vals=points.map(p=>p.eq);
+      const min=Math.min(...vals), max=Math.max(...vals);
+      const span=Math.max(1,max-min);
+      for(let i=0;i<5;i++){
+        const y=pad.t+(h-pad.t-pad.b)*i/4;
+        ctx.beginPath();ctx.moveTo(pad.l,y);ctx.lineTo(w-pad.r,y);ctx.stroke();
+        const val=max-span*i/4;
+        ctx.fillText('$'+Math.round(val),8,y+7);
+      }
+      const xFor=i=> pad.l+(w-pad.l-pad.r)*(points.length===1?0:i/(points.length-1));
+      const yFor=v=> pad.t+(max-v)/span*(h-pad.t-pad.b);
+      ctx.beginPath();
+      points.forEach((p,i)=>{
+        const x=xFor(i), y=yFor(p.eq);
+        if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+      });
+      const grad=ctx.createLinearGradient(0,0,w,0);
+      grad.addColorStop(0,'#56bfff'); grad.addColorStop(1,'#d8b764');
+      ctx.strokeStyle=grad; ctx.lineWidth=5; ctx.lineJoin='round'; ctx.lineCap='round'; ctx.stroke();
+      points.forEach((p,i)=>{
+        const x=xFor(i), y=yFor(p.eq);
+        ctx.fillStyle='#101214'; ctx.beginPath(); ctx.arc(x,y,8,0,Math.PI*2); ctx.fill();
+        ctx.strokeStyle='#56bfff'; ctx.lineWidth=3; ctx.stroke();
+      });
+      ctx.fillStyle='#aab1ba'; ctx.font='20px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif';
+      ctx.fillText(points[0].date, pad.l, h-14);
+      ctx.textAlign='right';
+      ctx.fillText(points[points.length-1].date, w-pad.r, h-14);
+      ctx.textAlign='left';
+    }
+    function render(){
+      renderCalendar();
+      fillInputs();
+      renderSummary();
+      renderTimeline();
+      renderChart();
+    }
+    ['inputA','inputB','inputC'].forEach(id=>{
+      document.getElementById(id).addEventListener('input',()=>{
+        setRec(selected,{
+          A:document.getElementById('inputA').value,
+          B:document.getElementById('inputB').value,
+          C:document.getElementById('inputC').value
+        });
+      });
+    });
+    document.getElementById('prevMonth').onclick=()=>{viewDate.setMonth(viewDate.getMonth()-1);render();};
+    document.getElementById('nextMonth').onclick=()=>{viewDate.setMonth(viewDate.getMonth()+1);render();};
+    document.querySelectorAll('[data-jump]').forEach(b=>{
+      b.onclick=()=>{viewDate.setMonth(viewDate.getMonth()+(b.dataset.jump==='next'?1:-1));render();showPage('home');};
+    });
+    document.querySelectorAll('.nav').forEach(btn=>{
+      btn.onclick=()=>showPage(btn.dataset.page);
+    });
+    function showPage(id){
+      document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active',p.id===id));
+      document.querySelectorAll('.nav').forEach(n=>n.classList.toggle('active',n.dataset.page===id));
+      if(id==='chart') setTimeout(renderChart,50);
+    }
+    document.querySelectorAll('.pill').forEach(p=>{
+      p.onclick=()=>{
+        const q=p.dataset.quick;
+        if(q==='clear'){
+          setRec(selected,{A:'',B:'',C:''});
+        }else if(q==='today'){
+          selected=iso(today); viewDate=new Date(today.getFullYear(),today.getMonth(),1); render();
+        }
+        document.querySelectorAll('.pill').forEach(x=>x.classList.remove('active'));
+        p.classList.add('active');
+        setTimeout(()=>{document.querySelector('[data-quick="all"]').classList.add('active'); p.classList.remove('active');},450);
+      };
+    });
+    document.getElementById('startCapital').addEventListener('input',e=>{
+      state.startCapital=Number(e.target.value||1000); save(); render();
+    });
+    document.getElementById('toggleAsset').onclick=()=>{hideAsset=!hideAsset; renderSummary();};
+    document.getElementById('openHelp').onclick=()=>{document.getElementById('helpModal').style.display='flex';};
+    document.getElementById('closeHelp').onclick=()=>{document.getElementById('helpModal').style.display='none';};
+    document.getElementById('helpModal').onclick=e=>{if(e.target.id==='helpModal') e.currentTarget.style.display='none';};
+    document.getElementById('exportCsv').onclick=()=>{
+      const rows=[['date','A','B','C','daily_pnl','equity']];
+      let eq=Number(state.startCapital||1000);
+      allDatesSorted().forEach(k=>{
+        const r=getRec(k), p=dayPnl(k); eq+=p;
+        rows.push([k,r.A||0,r.B||0,r.C||0,p,eq]);
+      });
+      download('abc_compound_records.csv', rows.map(r=>r.join(',')).join('\n'), 'text/csv');
+    };
+    document.getElementById('exportJson').onclick=()=>{
+      download('abc_compound_backup.json', JSON.stringify(state,null,2), 'application/json');
+    };
+    document.getElementById('importJson').onchange=e=>{
+      const file=e.target.files[0]; if(!file) return;
+      const reader=new FileReader();
+      reader.onload=()=>{
+        try{
+          const data=JSON.parse(reader.result);
+          if(!data.records) throw new Error('bad');
+          state=data; save(); render();
+          alert('匯入完成');
+        }catch(err){alert('備份檔格式不對');}
+      };
+      reader.readAsText(file);
+    };
+    document.getElementById('resetAll').onclick=()=>{
+      if(confirm('確定要清空全部資料？這不是停損，是砍倉。')){
+        state=defaultState(); save(); render();
+      }
+    };
+    function download(name, content, type){
+      const blob=new Blob([content],{type});
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement('a'); a.href=url; a.download=name; a.click();
+      setTimeout(()=>URL.revokeObjectURL(url),500);
+    }
+    render();
+  </script>
+</body>
+</html>
